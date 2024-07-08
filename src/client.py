@@ -19,13 +19,13 @@ class Client:
     state: ClientStates
 
     def __init__(self):
-        self.source_addr = getenv("SOURCE_IP"), getenv("SOURCE_PORT")
+        self.source_addr = getenv("SOURCE_IP"), int(getenv("SOURCE_PORT"))
         self.state = 0
 
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.connect((self.source_ip, self.source_port))
+        self.sock.connect((self.source_addr[0], self.source_addr[1]))
         # TODO HANDLE ERRORS
 
     def __fetchData(self):
