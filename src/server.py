@@ -1,6 +1,5 @@
 import socket
 from typing import Tuple
-import stun
 import threading
 
 
@@ -16,34 +15,35 @@ class Server:
 
     def __init__(self) -> None:
         source_ip = "0.0.0.0"
-        source_port = 8547
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        source_port = 8765
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind((source_ip, source_port))
-        nat_type, nat = stun.get_nat_type(self.sock,
-                                          source_ip, source_port,
-                                          stun_host='stun.l.google.com', stun_port=19302)
-
-        external_ip = nat['ExternalIP']
-        external_port = nat['ExternalPort']
-        self.addr = (external_ip, external_port)
 
         self.state = ServerStates.IDLE
 
-    def __fetchData(self) -> None:
+    def __serve(self, conn: socket) -> None:
         while True:
-            data, addr = self.sock.recvfrom(1024)
-            print('\r', addr, "<", data.decode())
+            data = conn.recv(1024)
+            data = data.decode()
+            if data == "stop":
+                conn.sendall(b"stopping server")
+                conn.close()
+                break
+            print("\r", "<", data)
+            conn.sendall(b"received data")
+
 
     def start(self) -> None:
         self.sock.listen(1)
         conn, addr = self.sock.accept()
-        threading.Thread(target=self.__fetchData).start()
-        print("stated server")
+        print(f"accepted connection from {addr}")
+        threading.Thread(target=self.__serve, args=(conn,)).start()
+        print(f"started serving for {addr}")
 
-    def getLink(self) -> str:
-        return ""
+    # def getLink(self) -> str:
+    #     return ""
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     server = Server()
     server.start()

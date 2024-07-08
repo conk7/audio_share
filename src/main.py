@@ -12,22 +12,22 @@ sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 sock.bind((source_ip, source_port))
 # nat_type, nat = stun.get_nat_type(sock, source_ip, source_port)
  
-nat_type, nat = stun.get_nat_type(sock,
-    source_ip, source_port,
-    stun_host='stun.l.google.com', stun_port=19302 )
+# nat_type, nat = stun.get_nat_type(sock,
+#     source_ip, source_port,
+#     stun_host='stun.l.google.com', stun_port=19302 )
  
-external_ip = nat['ExternalIP']
-external_port = nat['ExternalPort']
+# external_ip = nat['ExternalIP']
+# external_port = nat['ExternalPort']
  
-print("Мой адрес: %s:%s" % (external_ip,external_port))
+# print("Мой адрес: %s:%s" % (external_ip,external_port))
  
-def read_chat(sock):
-    while True:
-       data, addr = sock.recvfrom(1024)
-       print('\r', addr,"<", data.decode())
+# def read_chat(sock):
+#     while True:
+#        data, addr = sock.recvfrom(1024)
+#        print('\r', addr,"<", data.decode())
  
-reader = threading.Thread(target=read_chat,args=(sock,))
-reader.start()
+# reader = threading.Thread(target=read_chat,args=(sock,))
+# reader.start()
  
 remote_ip, remote_port = input(
     "Введите `адрес:порт` другого компьютера >"

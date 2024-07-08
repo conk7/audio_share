@@ -1,9 +1,8 @@
 import socket
-import stun
 from typing import Tuple
 from os import getenv
 import dotenv
-
+from time import sleep
 
 dotenv.load_dotenv()
 
@@ -19,20 +18,25 @@ class Client:
     state: ClientStates
 
     def __init__(self):
+        self.sock =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.source_addr = getenv("SOURCE_IP"), int(getenv("SOURCE_PORT"))
         print(self.source_addr)
         self.state = 0
 
     def connect(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.connect((self.source_addr[0], self.source_addr[1]))
-        self.sock.sendto("HELLO".encode(), self.source_addr)
+        flag = ""
+        while flag != "exit":
+            flag = input()
+            self.sock.send(flag.encode())
+            print(self.sock.recv(1024).decode())
+            # sleep(0.3)
+        self.sock.close()
 
         # TODO HANDLE ERRORS
 
-    def __fetchData(self):
-        self.sock.send("get_status".encode())
+    # def __fetchData(self):
+    #     self.sock.send("get_status".encode())
         # status = self.sock.recv(1024).decode()
         # return status
 
@@ -42,4 +46,4 @@ class Client:
 if __name__ == "__main__":
     client = Client()
     client.connect()
-    client._Client__fetchData()
+    # client._Client__fetchData()
