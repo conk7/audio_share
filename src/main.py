@@ -21,7 +21,7 @@ print("Мой адрес: %s:%s" % (external_ip,external_port))
  
 def read_chat(sock):
     while True:
-       data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+       data, addr = sock.recvfrom(1024)
        print('\r', addr,"<", data.decode())
  
 reader = threading.Thread(target=read_chat,args=(sock,))
