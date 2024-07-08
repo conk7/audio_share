@@ -1,7 +1,9 @@
 import stun
 import socket
 import threading
- 
+
+from mp3_handles import send_mp3
+
 source_ip = "0.0.0.0"
 source_port = 8547
  
@@ -37,4 +39,8 @@ while True:
     line = input(">")
     if line == '/exit':
         break
-    sock.sendto(line.encode(), remote)
+    elif line == 'send mp3':
+        sock.sendto(line.encode(), remote)
+        send_mp3(sock, remote)
+    else:
+        sock.sendto(line.encode(), remote)
