@@ -20,18 +20,21 @@ class Client:
 
     def __init__(self):
         self.source_addr = getenv("SOURCE_IP"), int(getenv("SOURCE_PORT"))
+        print(self.source_addr)
         self.state = 0
 
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.connect((self.source_addr[0], self.source_addr[1]))
+        self.sock.sendto("HELLO".encode(), self.source_addr)
+
         # TODO HANDLE ERRORS
 
     def __fetchData(self):
         self.sock.send("get_status".encode())
-        status = self.sock.recv(1024).decode()
-        return status
+        # status = self.sock.recv(1024).decode()
+        # return status
 
     # def disconnect(self):
 
@@ -39,4 +42,4 @@ class Client:
 if __name__ == "__main__":
     client = Client()
     client.connect()
-    client.__fetchData()
+    client._Client__fetchData()

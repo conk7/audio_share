@@ -20,7 +20,6 @@ class Server:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((source_ip, source_port))
-
         nat_type, nat = stun.get_nat_type(self.sock,
                                           source_ip, source_port,
                                           stun_host='stun.l.google.com', stun_port=19302)
@@ -37,6 +36,8 @@ class Server:
             print('\r', addr, "<", data.decode())
 
     def start(self) -> None:
+        self.sock.listen(1)
+        conn, addr = self.sock.accept()
         threading.Thread(target=self.__fetchData).start()
         print("stated server")
 
