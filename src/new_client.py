@@ -1,15 +1,13 @@
 import socket
 import select
-from typing import Dict, List, Any
+from typing import List
 import threading
 from time import sleep
 from utils import DataType, Data
 import stun
 
 
-class ServerStates:
-    IDLE = 0
-    PLAYING = 1
+USER_INPUT = None
 
 
 class App:
@@ -31,7 +29,7 @@ class App:
 
         self.conns: List[socket.socket] = []
         self.addrs: List[str] = []
-        self.state = ServerStates.IDLE
+        # self.state = ServerStates.IDLE
 
     def __handle_commands(self, conn: socket.socket, data: Data) -> None:
         data_type = data.type
@@ -67,15 +65,15 @@ class App:
         #         conn.sendall(data.encode())
 
     def __handle_peers(self) -> None:
-        iteration: int = 0
+        global USER_INPUT
         while True:
-            console_input = ""
-            if iteration % 10 == 0:
-                console_input = input()
-            self.__handle_send(console_input)
+            if USER_INPUT is not None:
+                self.__handle_send(USER_INPUT)
+                USER_INPUT = None
+            else:
+                self.__handle_send()
             self.__handle_recv()
             sleep(0.1)
-            iteration += 1
 
     def __connect_peer(self, addr: str) -> None:
         ip, port = addr.split(":")
@@ -87,16 +85,22 @@ class App:
         self.conns.append(sock)
         self.addrs.append(addr)
 
-    def __connect_peers(self, addrs: List[str]) -> None:
-        for addr in addrs:
-            ip, port = addr.split(":")
-            port = int(port)
+    # alternative method of connecting new peers
+    # def __connect_peers(self, addrs: List[str]) -> None:
+    #     for addr in addrs:
+    #         ip, port = addr.split(":")
+    #         port = int(port)
 
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((ip, port))
+    #         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #         sock.connect((ip, port))
 
-            self.conns.append(sock)
-        self.addrs.extend(addrs)
+    #         self.conns.append(sock)
+    #     self.addrs.extend(addrs)
+
+    def __handle_user_input(self) -> None:
+        global USER_INPUT
+        while True:
+            USER_INPUT = input().strip().lower()
 
     def connect(self, ip: str, port: int) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -110,8 +114,8 @@ class App:
         query = Data(
             type=DataType.GET_DATA, data=f"{self.external_ip}:{self.external_port}"
         )
-        query = query.model_dump_json()
-        sock.send(query.encode())
+        query = query.model_dump_json().encode()
+        sock.send(query)
         data = sock.recv(1024).decode()
 
         print(f"received addrs: {data}")
@@ -120,9 +124,10 @@ class App:
 
         if data.type == DataType.ADDRS and len(data.data) > 0:
             new_addrs = data.data
-            self.__connect_peers(new_addrs)
+            self.addrs.extend(new_addrs)
 
         threading.Thread(target=self.__handle_peers).start()
+        threading.Thread(target=self.__handle_user_input).start()
 
         while True:
             self.sock.listen(1)
@@ -136,6 +141,6 @@ class App:
 
 if __name__ == "__main__":
     BASE_PORT = 8765
-    port = BASE_PORT + 2
+    port = BASE_PORT + 3
     server = App("0.0.0.0", port)
     server.connect("127.0.0.1", BASE_PORT)

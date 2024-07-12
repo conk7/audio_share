@@ -1,6 +1,6 @@
 import socket
 from pydantic import BaseModel
-from typing import List, Any
+from typing import Any
 from enum import Enum
 
 def find_free_port(host: str, port: int) -> int:

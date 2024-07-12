@@ -1,6 +1,6 @@
 import socket
 import select
-from typing import Dict, List, Any
+from typing import List
 import threading
 from time import sleep
 from utils import DataType, Data
@@ -9,6 +9,9 @@ from utils import DataType, Data
 class ServerStates:
     IDLE = 0
     PLAYING = 1
+
+
+USER_INPUT = None
 
 
 class App:
@@ -61,28 +64,41 @@ class App:
         if len(self.conns) == 0:
             return
         if data != "":
+            data = Data(type=DataType.USER_INPUT, data=data)
+            data = data.model_dump_json()
             for conn in self.conns:
-                print(f"sending {data} to {conn}")
+                print(f"sent {data} to {conn}")
                 conn.sendall(data.encode())
-        _, w, _ = select.select([], self.conns, [], 0.1)
-        for conn in w:
-            if data != "":
-                conn.sendall(data.encode())
+        # _, w, _ = select.select([], self.conns, [], 0.1)
+        # for conn in w:
+        #     if data != "":
+        #         conn.sendall(data.encode())
 
     def __handle_peers(self) -> None:
+        global USER_INPUT
         while True:
             self.__handle_recv()
-            self.__handle_send()
+            if USER_INPUT is not None:
+                self.__handle_send(USER_INPUT)
+                USER_INPUT = None
+            else:
+                self.__handle_send()
             sleep(0.1)
 
-    def __notify_about_new_peer(self, addr: str)-> None:
+    def __notify_about_new_peer(self, addr: str) -> None:
         for conn in self.conns[:-1]:
             data = Data(type=DataType.NEW_PEER, data=addr)
             data = data.model_dump_json()
             conn.send(data.encode())
 
+    def __handle_user_input(self) -> None:
+        global USER_INPUT
+        while True:
+            USER_INPUT = input().strip().lower()
+
     def host(self) -> None:
         threading.Thread(target=self.__handle_peers).start()
+        threading.Thread(target=self.__handle_user_input).start()
         while True:
             self.sock.listen(1)
             conn, addr = self.sock.accept()
