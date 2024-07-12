@@ -5,7 +5,7 @@ import threading
 from time import sleep
 from utils import DataType, Data
 import stun
-
+from pydantic_core import _pydantic_core
 
 USER_INPUT = None
 IS_RUNNING = True
@@ -37,6 +37,11 @@ class App:
         if data_type == DataType.CONNECT:
             addr = data.data
             self.__connect_peer(addr)
+        elif data_type == DataType.DISCONNECT:
+            addr = data.data
+            idx = self.addrs.index(addr)
+            self.addrs.pop(idx)
+            self.conns.pop(idx)
 
     def __handle_recv(self) -> None:
         if len(self.conns) == 0:
@@ -47,14 +52,17 @@ class App:
             data = conn.recv(1024).decode()
 
             print(f"client received {data} from {conn}")
-
-            data = Data.model_validate_json(data)
+            try:
+                data = Data.model_validate_json(data)
+            except _pydantic_core.ValidationError:
+                print("Client received invalid data")
+                continue
             self.__handle_commands(conn, data)
 
     def __handle_send(self, data: str = "") -> None:
         if len(self.conns) == 0:
             return
-        
+
         if data == "dc":
             addr = f"{self.external_ip}:{self.external_port}"
             data = Data(type=DataType.DISCONNECT, data=addr)
@@ -69,7 +77,7 @@ class App:
             for conn in self.conns:
                 print(f"sent {data} to {conn}")
                 conn.sendall(data.encode())
-        
+
         # _, w, _ = select.select([], self.conns, [], 0.1)
         # for conn in w:
         #     if data != "":
@@ -106,7 +114,6 @@ class App:
 
         self.sock.close()
 
-        
     # alternative method of connecting new peers
     # def __connect_peers(self, addrs: List[str]) -> None:
     #     for addr in addrs:
@@ -119,7 +126,6 @@ class App:
     #         self.conns.append(sock)
     #     self.addrs.extend(addrs)
 
-
     def __handle_user_input(self) -> None:
         global USER_INPUT, IS_RUNNING
         while IS_RUNNING:
@@ -127,7 +133,11 @@ class App:
 
     def connect(self, ip: str, port: int) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((ip, port))
+        try:
+            sock.connect((ip, port))
+        except:
+            print("Could not connect to the server")
+            return
 
         self.conns.append(sock)
         self.addrs.append(f"{ip}:{port}")
@@ -154,7 +164,6 @@ class App:
 
         while True:
             self.sock.listen(1)
-            
             try:
                 conn, addr = self.sock.accept()
             except:
@@ -168,6 +177,6 @@ class App:
 
 if __name__ == "__main__":
     BASE_PORT = 8765
-    port = BASE_PORT + 1
+    port = BASE_PORT + 2
     server = App("0.0.0.0", port)
     server.connect("127.0.0.1", BASE_PORT)

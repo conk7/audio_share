@@ -136,7 +136,6 @@ class App:
         threading.Thread(target=self.__handle_user_input).start()
         while True:
             self.sock.listen(1)
-
             try:
                 conn, addr = self.sock.accept()
             except:
