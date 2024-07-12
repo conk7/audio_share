@@ -8,6 +8,7 @@ import stun
 
 
 USER_INPUT = None
+IS_RUNNING = True
 
 
 class App:
@@ -33,7 +34,7 @@ class App:
 
     def __handle_commands(self, conn: socket.socket, data: Data) -> None:
         data_type = data.type
-        if data_type == DataType.NEW_PEER:
+        if data_type == DataType.CONNECT:
             addr = data.data
             self.__connect_peer(addr)
 
@@ -53,26 +54,36 @@ class App:
     def __handle_send(self, data: str = "") -> None:
         if len(self.conns) == 0:
             return
-        if data != "":
+        
+        if data == "dc":
+            addr = f"{self.external_ip}:{self.external_port}"
+            data = Data(type=DataType.DISCONNECT, data=addr)
+            data = data.model_dump_json()
+            for conn in self.conns:
+                print(f"sent {data} to {conn}")
+                conn.sendall(data.encode())
+            self.__disconnect()
+        elif data != "":
             data = Data(type=DataType.USER_INPUT, data=data)
             data = data.model_dump_json()
             for conn in self.conns:
                 print(f"sent {data} to {conn}")
                 conn.sendall(data.encode())
+        
         # _, w, _ = select.select([], self.conns, [], 0.1)
         # for conn in w:
         #     if data != "":
         #         conn.sendall(data.encode())
 
     def __handle_peers(self) -> None:
-        global USER_INPUT
-        while True:
+        global USER_INPUT, IS_RUNNING
+        while IS_RUNNING:
+            self.__handle_recv()
             if USER_INPUT is not None:
                 self.__handle_send(USER_INPUT)
                 USER_INPUT = None
             else:
                 self.__handle_send()
-            self.__handle_recv()
             sleep(0.1)
 
     def __connect_peer(self, addr: str) -> None:
@@ -85,6 +96,17 @@ class App:
         self.conns.append(sock)
         self.addrs.append(addr)
 
+    def __disconnect(self) -> None:
+        global IS_RUNNING
+        IS_RUNNING = False
+
+        for conn in self.conns:
+            conn.close()
+        self.conns.clear()
+
+        self.sock.close()
+
+        
     # alternative method of connecting new peers
     # def __connect_peers(self, addrs: List[str]) -> None:
     #     for addr in addrs:
@@ -97,9 +119,10 @@ class App:
     #         self.conns.append(sock)
     #     self.addrs.extend(addrs)
 
+
     def __handle_user_input(self) -> None:
-        global USER_INPUT
-        while True:
+        global USER_INPUT, IS_RUNNING
+        while IS_RUNNING:
             USER_INPUT = input().strip().lower()
 
     def connect(self, ip: str, port: int) -> None:
@@ -131,7 +154,11 @@ class App:
 
         while True:
             self.sock.listen(1)
-            conn, addr = self.sock.accept()
+            
+            try:
+                conn, addr = self.sock.accept()
+            except:
+                break
 
             print(f"accepted connection from {addr[0]}:{str(addr[1])}")
 
@@ -141,6 +168,6 @@ class App:
 
 if __name__ == "__main__":
     BASE_PORT = 8765
-    port = BASE_PORT + 3
+    port = BASE_PORT + 1
     server = App("0.0.0.0", port)
     server.connect("127.0.0.1", BASE_PORT)

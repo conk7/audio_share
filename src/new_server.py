@@ -4,6 +4,7 @@ from typing import List
 import threading
 from time import sleep
 from utils import DataType, Data
+import stun
 
 
 class ServerStates:
@@ -12,12 +13,25 @@ class ServerStates:
 
 
 USER_INPUT = None
+IS_RUNNING = True
 
 
 class App:
     def __init__(self, ip: str, port: int) -> None:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind((ip, port))
+
+        mock_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        mock_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        mock_sock.bind((ip, port))
+        _, nat = stun.get_nat_type(
+            mock_sock, ip, port, stun_host="stun.l.google.com", stun_port=19302
+        )
+        mock_sock.close()
+
+        # self.external_ip = nat["ExternalIP"]
+        self.external_ip = "127.0.0.1"
+        self.external_port = nat["ExternalPort"]
 
         self.conns: List[socket.socket] = []
         self.addrs: List[str] = []
@@ -34,12 +48,17 @@ class App:
 
             print(f"self addrs: {self.addrs}")
 
-            reply = Data(type=DataType.ADDRS, data=self.addrs[:-1].copy())
+            reply = Data(type=DataType.ADDRS, data=self.addrs[:-1])
             reply_json = reply.model_dump_json()
 
             print(f"handle_comms with type {data_type} sent\n {reply_json} to {conn}")
 
             conn.send(reply_json.encode())
+        elif data_type == DataType.DISCONNECT:
+            addr = data.data
+            idx = self.addrs.index(addr)
+            self.addrs.pop(idx)
+            self.conns.pop(idx)
         elif data_type == DataType.USER_INPUT:
             reply = Data(type=DataType.INFO, data="server received user input")
             reply_json = reply.model_dump_json()
@@ -61,9 +80,15 @@ class App:
             self.__handle_commands(conn, data)
 
     def __handle_send(self, data: str = "") -> None:
-        if len(self.conns) == 0:
-            return
-        if data != "":
+        if data == "dc":
+            addr = f"{self.external_ip}:{self.external_port}"
+            data = Data(type=DataType.DISCONNECT, data=addr)
+            data = data.model_dump_json()
+            for conn in self.conns:
+                print(f"sent {data} to {conn}")
+                conn.sendall(data.encode())
+            self.__disconnect()
+        elif data != "":
             data = Data(type=DataType.USER_INPUT, data=data)
             data = data.model_dump_json()
             for conn in self.conns:
@@ -75,8 +100,8 @@ class App:
         #         conn.sendall(data.encode())
 
     def __handle_peers(self) -> None:
-        global USER_INPUT
-        while True:
+        global USER_INPUT, IS_RUNNING
+        while IS_RUNNING:
             self.__handle_recv()
             if USER_INPUT is not None:
                 self.__handle_send(USER_INPUT)
@@ -87,21 +112,35 @@ class App:
 
     def __notify_about_new_peer(self, addr: str) -> None:
         for conn in self.conns[:-1]:
-            data = Data(type=DataType.NEW_PEER, data=addr)
+            data = Data(type=DataType.CONNECT, data=addr)
             data = data.model_dump_json()
             conn.send(data.encode())
 
     def __handle_user_input(self) -> None:
-        global USER_INPUT
-        while True:
+        global USER_INPUT, IS_RUNNING
+        while IS_RUNNING:
             USER_INPUT = input().strip().lower()
+
+    def __disconnect(self) -> None:
+        global IS_RUNNING
+        IS_RUNNING = False
+
+        for conn in self.conns:
+            conn.close()
+        self.conns.clear()
+
+        self.sock.close()
 
     def host(self) -> None:
         threading.Thread(target=self.__handle_peers).start()
         threading.Thread(target=self.__handle_user_input).start()
         while True:
             self.sock.listen(1)
-            conn, addr = self.sock.accept()
+
+            try:
+                conn, addr = self.sock.accept()
+            except:
+                break
 
             addr = f"{addr[0]}:{str(addr[1])}"
             print(f"accepted connection from {addr}")

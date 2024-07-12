@@ -12,10 +12,11 @@ def find_free_port(host: str, port: int) -> int:
 
 class DataType(Enum):
     GET_DATA = 0
-    ADDRS = 1
-    INFO = 2
-    NEW_PEER = 3
-    USER_INPUT = 4
+    CONNECT = 1
+    DISCONNECT = 2
+    ADDRS = 3
+    INFO = 4
+    USER_INPUT = 5
 
 
 class Data(BaseModel):
