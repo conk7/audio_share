@@ -17,8 +17,15 @@ class DataType(Enum):
     ADDRS = 3
     INFO = 4
     USER_INPUT = 5
+    CHUNK_MP3 = 6
+    CHUNKS_INFO = 7
 
 
 class Data(BaseModel):
     type: DataType
+    data: Any
+
+class DataMP3(BaseModel):
+    chunk_num: int
+    total_chunks: int
     data: Any
