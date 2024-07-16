@@ -1,14 +1,32 @@
 import socket
 import select
-from typing import List
+import os
+import ast
 import threading
-from time import sleep
-from utils import DataType, Data
 import stun
+import queue
+
+from typing import List
+from time import sleep
+from utils import DataType, Data, DataMP3
 from pydantic_core import _pydantic_core
+from typing import Dict
+from pydub import AudioSegment, playback
+from io import BytesIO
+from mp3_handles import path_to_ffmpeg
+from pathlib import Path
+
 
 USER_INPUT = None
 IS_RUNNING = True
+
+CHUNK_SIZE_SEND = 1024 * 1024
+CHUNK_SIZE_RECV = 1024 * 1024
+
+
+audio_file_per_peer: Dict[socket.socket, bytes] = dict()
+chunks_per_peer: Dict[socket.socket, List[Data]] = dict()
+audio_queue = queue.Queue()
 
 
 class App:
@@ -16,21 +34,19 @@ class App:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind((ip, port))
 
-        mock_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        mock_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        mock_sock.bind((ip, port))
-        _, nat = stun.get_nat_type(
-            mock_sock, ip, port, stun_host="stun.l.google.com", stun_port=19302
-        )
-        mock_sock.close()
+        # _, self.external_ip, self.external_port = stun.get_ip_info(
+        #     ip, port, stun_host="stun.l.google.com", stun_port=19302
+        # )
 
-        # self.external_ip = nat["ExternalIP"]
         self.external_ip = "127.0.0.1"
-        self.external_port = nat["ExternalPort"]
+        self.external_port = port
 
         self.conns: List[socket.socket] = []
         self.addrs: List[str] = []
         # self.state = ServerStates.IDLE
+
+        AudioSegment.ffmpeg = path_to_ffmpeg()
+        os.environ["PATH"] += os.pathsep + str(Path(path_to_ffmpeg()).parent)
 
     def __handle_commands(self, conn: socket.socket, data: Data) -> None:
         data_type = data.type
@@ -42,6 +58,9 @@ class App:
             idx = self.addrs.index(addr)
             self.addrs.pop(idx)
             self.conns.pop(idx)
+        elif data_type == DataType.CHUNKS_INFO:
+            chunks_per_peer[conn] = data.data
+            self.__get_chunks(conn, data.data)
 
     def __handle_recv(self) -> None:
         if len(self.conns) == 0:
@@ -49,9 +68,9 @@ class App:
         r, _, _ = select.select(self.conns, [], [], 0.5)
         # print(f"clients potential receivers: {r}")
         for conn in r:
-            data = conn.recv(1024).decode()
+            data = conn.recv(CHUNK_SIZE_RECV).decode()
 
-            print(f"client received {data} from {conn}")
+            print(f"client received {data[:50]} from {conn}")
             try:
                 data = Data.model_validate_json(data)
             except _pydantic_core.ValidationError:
@@ -83,6 +102,37 @@ class App:
         #     if data != "":
         #         conn.sendall(data.encode())
 
+    def __get_chunks(self, conn: socket.socket, chunk_info: List[Data]) -> None:
+        for i, chunk_len in enumerate(chunk_info):
+            data = conn.recv(chunk_len).decode()
+            print(data[:50])
+            try:
+                data = Data.model_validate_json(data)
+            except _pydantic_core.ValidationError:
+                print(f"Client received invalid audio data, i = {i}, ")
+                continue
+
+            if data.type != DataType.CHUNK_MP3:
+                break
+
+            data_mp3 = DataMP3.model_validate(data.data)
+
+            if data_mp3.chunk_num != i:
+                break
+            chunk = ast.literal_eval(data_mp3.data)
+
+            if i == 0:
+                audio_file_per_peer[conn] = chunk
+            elif i < data_mp3.total_chunks:
+                audio_file_per_peer[conn] += chunk
+            elif i == data_mp3.total_chunks:
+                audio_bytes = BytesIO(audio_file_per_peer[conn])
+                song = AudioSegment.from_wav(audio_bytes)
+                audio_queue.put(song)
+                playback.play(song)
+                chunks_per_peer.pop(conn)
+                print("FINISHED RECEIVING AUDIO")
+
     def __handle_peers(self) -> None:
         global USER_INPUT, IS_RUNNING
         while IS_RUNNING:
@@ -113,6 +163,8 @@ class App:
         self.conns.clear()
 
         self.sock.close()
+
+        os._exit(0)
 
     # alternative method of connecting new peers
     # def __connect_peers(self, addrs: List[str]) -> None:
@@ -149,7 +201,7 @@ class App:
         )
         query = query.model_dump_json().encode()
         sock.send(query)
-        data = sock.recv(1024).decode()
+        data = sock.recv(CHUNK_SIZE_RECV).decode()
 
         print(f"received addrs: {data}")
 
@@ -177,6 +229,6 @@ class App:
 
 if __name__ == "__main__":
     BASE_PORT = 8765
-    port = BASE_PORT + 2
+    port = BASE_PORT + 1
     server = App("0.0.0.0", port)
     server.connect("127.0.0.1", BASE_PORT)

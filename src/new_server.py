@@ -1,10 +1,16 @@
 import socket
 import select
-from typing import List
 import threading
-from time import sleep
-from utils import DataType, Data
+import os
 import stun
+
+from typing import List
+from time import sleep
+from utils import DataType, Data, DataMP3
+from mp3_handles import path_to_ffmpeg
+from pathlib import Path
+from pydub import AudioSegment, playback
+from io import BytesIO
 
 
 class ServerStates:
@@ -16,26 +22,28 @@ USER_INPUT = None
 IS_RUNNING = True
 
 
+CHUNK_SIZE_SEND = 500 * 1024
+CHUNK_SIZE_RECV = 1024
+
+
 class App:
     def __init__(self, ip: str, port: int) -> None:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind((ip, port))
 
-        mock_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        mock_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        mock_sock.bind((ip, port))
-        _, nat = stun.get_nat_type(
-            mock_sock, ip, port, stun_host="stun.l.google.com", stun_port=19302
-        )
-        mock_sock.close()
+        # _, self.external_ip, self.external_port = stun.get_ip_info(
+        #     ip, port, stun_host="stun.l.google.com", stun_port=19302
+        # )
 
-        # self.external_ip = nat["ExternalIP"]
         self.external_ip = "127.0.0.1"
-        self.external_port = nat["ExternalPort"]
+        self.external_port = port
 
         self.conns: List[socket.socket] = []
         self.addrs: List[str] = []
         self.state = ServerStates.IDLE
+
+        AudioSegment.ffmpeg = path_to_ffmpeg()
+        os.environ["PATH"] += os.pathsep + str(Path(path_to_ffmpeg()).parent)
 
     def __handle_commands(self, conn: socket.socket, data: Data) -> None:
         data_type = data.type
@@ -67,6 +75,49 @@ class App:
 
             conn.send(reply_json.encode())
 
+    def __stream_audio(self, song: AudioSegment) -> None:
+        export_bytes = BytesIO()
+        song.export(export_bytes, format="wav")  # to mp3
+        export_bytes = export_bytes.getvalue()
+        song_len = len(export_bytes)
+
+        # print("SONG LEN", song_len)
+
+        if song_len % CHUNK_SIZE_SEND == 0:
+            total_chunks = (song_len / CHUNK_SIZE_SEND) - 1
+        else:
+            total_chunks = (song_len // CHUNK_SIZE_SEND) - 1
+
+        chunks = []
+        chunks_info = []
+        for i in range(total_chunks):
+            data_mp3 = DataMP3(
+                chunk_num=i,
+                total_chunks=total_chunks - 1,
+                data=str(export_bytes[i * CHUNK_SIZE_SEND : (i + 1) * CHUNK_SIZE_SEND]),
+            )
+
+            chunk = Data(type=DataType.CHUNK_MP3, data=data_mp3)
+            chunk_json = chunk.model_dump_json().encode()
+            chunks.append(chunk_json)
+
+            chunks_info = Data(
+                type=DataType.CHUNKS_INFO, data=[len(chunk) for chunk in chunks]
+            )
+            chunks_info_json = chunks_info.model_dump_json().encode()
+
+        for conn in self.conns:
+            conn.sendall(chunks_info_json)
+
+        for conn in self.conns:
+            for i, chunk in enumerate(chunks):
+                bytes_sent = conn.send(chunk)
+                print("", chunk.decode()[2:50])
+                if bytes_sent != chunks_info.data[i]:
+                    # print(f"sent {bytes_sent} expected to send {chunks_info_json[i]}")
+                    break
+                sleep(0.001)
+
     def __handle_recv(self) -> None:
         if len(self.conns) == 0:
             return
@@ -88,16 +139,25 @@ class App:
                 print(f"sent {data} to {conn}")
                 conn.sendall(data.encode())
             self.__disconnect()
+        elif data[:4] == "play":
+            song_name = data[5:]
+            SCRIPT_DIR = Path(__file__).parent.parent
+            song_path = str(Path(SCRIPT_DIR, song_name))
+
+            print(song_path)
+
+            song = AudioSegment.from_mp3(song_path)
+            song -= 30
+            self.__stream_audio(song)
+
+            # playback.play(song)
+
         elif data != "":
             data = Data(type=DataType.USER_INPUT, data=data)
             data = data.model_dump_json()
             for conn in self.conns:
                 print(f"sent {data} to {conn}")
                 conn.sendall(data.encode())
-        # _, w, _ = select.select([], self.conns, [], 0.1)
-        # for conn in w:
-        #     if data != "":
-        #         conn.sendall(data.encode())
 
     def __handle_peers(self) -> None:
         global USER_INPUT, IS_RUNNING
@@ -130,6 +190,8 @@ class App:
         self.conns.clear()
 
         self.sock.close()
+
+        os._exit(0)
 
     def host(self) -> None:
         threading.Thread(target=self.__handle_peers).start()
