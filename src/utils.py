@@ -32,6 +32,9 @@ class DataType(Enum):
     USER_INPUT = 5
     CHUNK_MP3 = 6
     CHUNKS_INFO = 7
+    PAUSE = 8
+    RESUME = 9
+    SONG_CHANGE = 10
 
 
 class Data(BaseModel):

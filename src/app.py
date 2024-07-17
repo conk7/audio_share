@@ -59,6 +59,7 @@ class App:
         self.audio_files: List[Any] = []
         self.playing_song_idx: int = -1
         self.playing_song: PlayObject | None = None
+        self.is_playing = False
 
     def __handle_commands(self, conn: socket.socket, data: Data) -> None:
         data_type = data.type
@@ -85,6 +86,9 @@ class App:
             idx = self.addrs.index(addr)
             self.addrs.pop(idx)
             self.peers.pop(idx)
+        elif data_type == DataType.CHUNKS_INFO:
+            chunks_per_peer[conn] = data.data
+            self.__get_chunks(conn, data.data)
         elif data_type == DataType.USER_INPUT:
             reply = Data(type=DataType.INFO, data="server received user input")
             reply_json = reply.model_dump_json()
@@ -92,9 +96,14 @@ class App:
             print(f"handle_comms with type {data_type} sent\n {reply_json} to {conn}")
 
             conn.send(reply_json.encode())
-        elif data_type == DataType.CHUNKS_INFO:
-            chunks_per_peer[conn] = data.data
-            self.__get_chunks(conn, data.data)
+        elif data_type == DataType.PAUSE:
+            if self.playing_song is not None and self.is_playing:
+                self.playing_song.pause()
+                self.is_playing = False
+        elif data_type == DataType.RESUME:
+            if self.playing_song is not None and not self.is_playing:
+                self.playing_song.resume()
+                self.is_playing = True
 
     def __send_audio(self, song_name: str) -> None:
         SCRIPT_DIR = Path(__file__).parent.parent
@@ -104,8 +113,6 @@ class App:
 
         song = AudioSegment.from_mp3(song_path)
         song -= 30
-
-        self.__add_audio(song)
 
         export_bytes = BytesIO()
         song.export(export_bytes, format="mp3")
@@ -141,6 +148,9 @@ class App:
 
         sleep(0.1)
 
+        # put it here to minimise playback latency between local host and remote peers
+        self.__add_audio(song)
+
         for conn in self.peers:
             for i, chunk in enumerate(chunks):
                 bytes_sent = conn.send(chunk)
@@ -162,15 +172,27 @@ class App:
         if len(self.audio_files) == 1 and self.playing_song is None:
             self.playing_song_idx = 0
             self.playing_song = playback._play_with_simpleaudio(self.audio_files[0])
-            print(f"is_playing {self.playing_song.is_playing()}")
+            self.is_playing = True
 
     def __pause_audio(self) -> None:
-        if self.playing_song is not None and self.playing_song.is_playing():
+        if self.playing_song is not None and self.is_playing:
+            for peer in self.peers:
+                data = Data(type=DataType.PAUSE, data="")
+                data_json = data.model_dump_json()
+                data_json = data_json.encode()
+                peer.sendall(data_json)
             self.playing_song.pause()
+            self.is_playing = False
 
     def __resume_audio(self) -> None:
-        if self.playing_song is not None and not self.playing_song.is_playing():
+        if self.playing_song is not None and not self.is_playing:
+            for peer in self.peers:
+                data = Data(type=DataType.RESUME, data="")
+                data_json = data.model_dump_json()
+                data_json = data_json.encode()
+                peer.sendall(data_json)
             self.playing_song.resume()
+            self.is_playing = True
 
     def __handle_recv(self) -> None:
         if len(self.peers) == 0:
@@ -195,6 +217,12 @@ class App:
         elif data[:4] == "play":
             song_name = data[5:]
             self.__send_audio(song_name)
+
+        elif data == "pause":
+            self.__pause_audio()
+
+        elif data == "resume":
+            self.__resume_audio()
 
         elif data != "":
             self.__send_user_input(data)
