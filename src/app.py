@@ -25,7 +25,6 @@ class ServerStates:
 USER_INPUT = None
 IS_RUNNING = True
 
-
 CHUNK_SIZE_SEND = 500 * 1024
 CHUNK_SIZE_RECV = 1024
 
@@ -152,7 +151,7 @@ class App:
         for conn in r:
             data = conn.recv(1024).decode()
 
-            print(f"server received {data} from {conn}")
+            print(f"App received {data} from {conn}")
 
             try:
                 data = Data.model_validate_json(data)
