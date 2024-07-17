@@ -114,7 +114,7 @@ class App:
         except FileNotFoundError:
             print(f"Could not find song with path = {song_path}")
             return
-        
+
         song -= 30
 
         export_bytes = BytesIO()
@@ -171,8 +171,6 @@ class App:
                 peer.sendall(data)
                 print(f"successfully sent audio to {peer}")
 
-        
-
     def __add_audio(self, song) -> None:
         self.audio_files.append(song)
 
@@ -202,6 +200,55 @@ class App:
                 peer.sendall(data_json)
             self.playing_song.resume()
             self.is_playing = True
+
+    def __get_chunks(self, conn: socket.socket, chunk_info: List[Data]) -> None:
+        for i, chunk_len in enumerate(chunk_info):
+            data = conn.recv(chunk_len).decode()
+            print(f"slice of audio chunk: {data[:50]}")
+
+            try:
+                data = Data.model_validate_json(data)
+            except _pydantic_core.ValidationError:
+                print(f"App received invalid audio data, i = {i}")
+                continue
+
+            if data.type != DataType.CHUNK_MP3:
+                break
+
+            data_mp3 = DataMP3.model_validate(data.data)
+
+            if data_mp3.chunk_num != i:
+                break
+            chunk = ast.literal_eval(data_mp3.data)
+
+            if i == 0:
+                audio_file_per_peer[conn] = chunk
+            elif i <= data_mp3.total_chunks:
+                audio_file_per_peer[conn] += chunk
+
+        data = conn.recv(CHUNK_SIZE_RECV).decode()
+
+        try:
+            data = Data.model_validate_json(data)
+        except _pydantic_core.ValidationError:
+            print(f"App received invalid audio data {data}")
+            chunks_per_peer.pop(conn)
+            return
+
+        if data.type != DataType.SONG_INFO:
+            print(f"App received invalid audio data {data}")
+            chunks_per_peer.pop(conn)
+            return
+
+        is_playing, timestamp = data.data
+
+        if is_playing:
+            audio_bytes = BytesIO(audio_file_per_peer[conn])
+            song = AudioSegment.from_mp3(audio_bytes)
+            self.__add_audio(song[timestamp:])
+            chunks_per_peer.pop(conn)
+
+        print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
 
     def __handle_recv(self) -> None:
         if len(self.peers) == 0:
@@ -237,6 +284,11 @@ class App:
         elif data != "":
             self.__send_user_input(data)
 
+    def __handle_user_input(self) -> None:
+        global USER_INPUT, IS_RUNNING
+        while IS_RUNNING:
+            USER_INPUT = input().strip().lower()
+
     def __send_user_input(self, data: str) -> None:
         data = Data(type=DataType.USER_INPUT, data=data)
         data = data.model_dump_json()
@@ -245,60 +297,6 @@ class App:
         for conn in self.peers:
             print(f"sent {data} to {conn}")
             conn.sendall(data)
-
-    def __get_chunks(self, conn: socket.socket, chunk_info: List[Data]) -> None:
-        for i, chunk_len in enumerate(chunk_info):
-            data = conn.recv(chunk_len).decode()
-            print(f"slice of audio chunk: {data[:50]}")
-
-            try:
-                data = Data.model_validate_json(data)
-            except _pydantic_core.ValidationError:
-                print(f"App received invalid audio data, i = {i}")
-                continue
-
-            if data.type != DataType.CHUNK_MP3:
-                break
-
-            data_mp3 = DataMP3.model_validate(data.data)
-
-            if data_mp3.chunk_num != i:
-                break
-            chunk = ast.literal_eval(data_mp3.data)
-
-            if i == 0:
-                audio_file_per_peer[conn] = chunk
-            elif i <= data_mp3.total_chunks:
-                audio_file_per_peer[conn] += chunk
-            elif i == data_mp3.total_chunks:
-                audio_bytes = BytesIO(audio_file_per_peer[conn])
-                song = AudioSegment.from_mp3(audio_bytes)
-                self.__add_audio(song)
-                chunks_per_peer.pop(conn)
-        
-        data = conn.recv(CHUNK_SIZE_RECV).decode()
-
-        try:
-            data = Data.model_validate_json(data)
-        except _pydantic_core.ValidationError:
-            print(f"App received invalid audio data {data}")
-            chunks_per_peer.pop(conn)
-            return
-        
-        if data.type != DataType.SONG_INFO:
-            print(f"App received invalid audio data {data}")
-            chunks_per_peer.pop(conn)
-            return
-        
-        is_playing, timestamp = data.data
-
-        if is_playing:
-            audio_bytes = BytesIO(audio_file_per_peer[conn])
-            song = AudioSegment.from_mp3(audio_bytes)
-            self.__add_audio(song[timestamp:])
-            chunks_per_peer.pop(conn)
-        
-        print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
 
     def __handle_peers(self) -> None:
         global USER_INPUT, IS_RUNNING
@@ -347,11 +345,6 @@ class App:
         self.sock.close()
 
         os._exit(0)
-
-    def __handle_user_input(self) -> None:
-        global USER_INPUT, IS_RUNNING
-        while IS_RUNNING:
-            USER_INPUT = input().strip().lower()
 
     def host(self) -> None:
         threading.Thread(target=self.__handle_peers).start()
