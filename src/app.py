@@ -5,9 +5,8 @@ import select
 import threading
 import os
 import stun
-import queue
 
-from typing import List, Dict
+from typing import List, Dict, Any
 from time import sleep
 from utils import DataType, Data, DataMP3, add_CL_args
 from pydantic_core import _pydantic_core
@@ -15,6 +14,7 @@ from mp3_handles import path_to_ffmpeg
 from pathlib import Path
 from pydub import AudioSegment, playback
 from io import BytesIO
+from simpleaudio import PlayObject
 
 
 class ServerStates:
@@ -26,14 +26,11 @@ USER_INPUT = None
 IS_RUNNING = True
 
 CHUNK_SIZE_SEND = 500 * 1024
-CHUNK_SIZE_RECV = 1024
+CHUNK_SIZE_RECV = 500 * 1024
 
 
 audio_file_per_peer: Dict[socket.socket, bytes] = dict()
 chunks_per_peer: Dict[socket.socket, List[Data]] = dict()
-
-audio_queue = queue.Queue()
-CURRENTLY_PLAYING = None
 
 
 parser = argparse.ArgumentParser()
@@ -58,6 +55,10 @@ class App:
 
         AudioSegment.ffmpeg = path_to_ffmpeg()
         os.environ["PATH"] += os.pathsep + str(Path(path_to_ffmpeg()).parent)
+
+        self.audio_files: List[Any] = []
+        self.playing_song_idx: int = -1
+        self.playing_song: PlayObject | None = None
 
     def __handle_commands(self, conn: socket.socket, data: Data) -> None:
         data_type = data.type
@@ -95,13 +96,22 @@ class App:
             chunks_per_peer[conn] = data.data
             self.__get_chunks(conn, data.data)
 
-    def __send_audio(self, song: AudioSegment) -> None:
-        export_bytes = BytesIO()
-        song.export(export_bytes, format="mp3")  # to mp3
-        export_bytes = export_bytes.getvalue()
-        song_len = len(export_bytes)
+    def __send_audio(self, song_name: str) -> None:
+        SCRIPT_DIR = Path(__file__).parent.parent
+        song_path = str(Path(SCRIPT_DIR, song_name))
 
-        # print("SONG LEN", song_len)
+        print(f"song path: {song_path}")
+
+        song = AudioSegment.from_mp3(song_path)
+        song -= 30
+
+        self.__add_audio(song)
+
+        export_bytes = BytesIO()
+        song.export(export_bytes, format="mp3")
+        export_bytes = export_bytes.getvalue()
+
+        song_len = len(export_bytes)
 
         if song_len % CHUNK_SIZE_SEND == 0:
             total_chunks = (song_len / CHUNK_SIZE_SEND) - 1
@@ -121,10 +131,10 @@ class App:
             chunk_json = chunk.model_dump_json().encode()
             chunks.append(chunk_json)
 
-            chunks_info = Data(
-                type=DataType.CHUNKS_INFO, data=[len(chunk) for chunk in chunks]
-            )
-            chunks_info_json = chunks_info.model_dump_json().encode()
+        chunks_info = Data(
+            type=DataType.CHUNKS_INFO, data=[len(chunk) for chunk in chunks]
+        )
+        chunks_info_json = chunks_info.model_dump_json().encode()
 
         for conn in self.peers:
             conn.sendall(chunks_info_json)
@@ -140,58 +150,69 @@ class App:
                         f"sent {bytes_sent} expected to send {chunks_info_json[i]}. conn {conn}"
                     )
                     break
-                sleep(0.005)
+                sleep(0.01)
             else:
                 print(f"successfully sent audio to {conn}")
+
+    def __add_audio(self, song) -> None:
+        self.audio_files.append(song)
+
+        if len(self.audio_files) == 21:
+            self.audio_files.pop(0)
+        if len(self.audio_files) == 1 and self.playing_song is None:
+            self.playing_song_idx = 0
+            self.playing_song = playback._play_with_simpleaudio(self.audio_files[0])
+            print(f"is_playing {self.playing_song.is_playing()}")
+
+    def __pause_audio(self) -> None:
+        if self.playing_song is not None and self.playing_song.is_playing():
+            self.playing_song.pause()
+
+    def __resume_audio(self) -> None:
+        if self.playing_song is not None and not self.playing_song.is_playing():
+            self.playing_song.resume()
 
     def __handle_recv(self) -> None:
         if len(self.peers) == 0:
             return
         r, _, _ = select.select(self.peers, [], [], 0.1)
         for conn in r:
-            data = conn.recv(1024).decode()
+            data = conn.recv(CHUNK_SIZE_RECV).decode()
 
-            print(f"App received {data} from {conn}")
+            print(f"App received {data[:50]} from {conn}")
 
             try:
                 data = Data.model_validate_json(data)
             except _pydantic_core.ValidationError:
-                print("Client received invalid data")
+                print("App received invalid data")
                 continue
             self.__handle_commands(conn, data)
 
     def __handle_send(self, data: str = "") -> None:
         if data == "dc":
-            addr = f"{self.external_ip}:{self.external_port}"
-            data = Data(type=DataType.DISCONNECT, data=addr)
-            data = data.model_dump_json()
-            for conn in self.peers:
-                print(f"sent {data} to {conn}")
-                conn.sendall(data.encode())
             self.__disconnect()
+
         elif data[:4] == "play":
             song_name = data[5:]
-            SCRIPT_DIR = Path(__file__).parent.parent
-            song_path = str(Path(SCRIPT_DIR, song_name))
+            self.__send_audio(song_name)
 
-            print(song_path)
-
-            song = AudioSegment.from_mp3(song_path)
-            song -= 30
-            self.__send_audio(song)
-
-            # playback.play(song)
         elif data != "":
-            data = Data(type=DataType.USER_INPUT, data=data)
-            data = data.model_dump_json()                                       #TODO handle exception
-            for conn in self.peers:
-                print(f"sent {data} to {conn}")
-                conn.sendall(data.encode())
+            self.__send_user_input(data)
+
+    def __send_user_input(self, data: str) -> None:
+        data = Data(type=DataType.USER_INPUT, data=data)
+        data = data.model_dump_json()
+        data = data.encode()
+
+        for conn in self.peers:
+            print(f"sent {data} to {conn}")
+            conn.sendall(data)
 
     def __get_chunks(self, conn: socket.socket, chunk_info: List[Data]) -> None:
         for i, chunk_len in enumerate(chunk_info):
             data = conn.recv(chunk_len).decode()
-            print(data[:50])
+            print(f"slice of audio chunk: {data[:50]}")
+
             try:
                 data = Data.model_validate_json(data)
             except _pydantic_core.ValidationError:
@@ -214,8 +235,9 @@ class App:
             elif i == data_mp3.total_chunks:
                 audio_bytes = BytesIO(audio_file_per_peer[conn])
                 song = AudioSegment.from_mp3(audio_bytes)
-                audio_queue.put(song)
+                self.__add_audio(song)
                 chunks_per_peer.pop(conn)
+
                 print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
 
     def __handle_peers(self) -> None:
@@ -246,6 +268,15 @@ class App:
         self.addrs.append(addr)
 
     def __disconnect(self) -> None:
+        addr = f"{self.external_ip}:{self.external_port}"
+        data = Data(type=DataType.DISCONNECT, data=addr)
+        data = data.model_dump_json()
+        data = data.encode()
+
+        for conn in self.peers:
+            print(f"sent {data} to {conn}")
+            conn.sendall(data)
+
         global IS_RUNNING
         IS_RUNNING = False
 
