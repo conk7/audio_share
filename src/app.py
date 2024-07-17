@@ -5,6 +5,7 @@ import select
 import threading
 import os
 import stun
+import time
 
 from typing import List, Dict, Any
 from time import sleep
@@ -27,10 +28,7 @@ IS_RUNNING = True
 
 CHUNK_SIZE_SEND = 500 * 1024
 CHUNK_SIZE_RECV = 500 * 1024
-
-
-audio_file_per_peer: Dict[socket.socket, bytes] = dict()
-chunks_per_peer: Dict[socket.socket, List[Data]] = dict()
+AUDIO_QUEUE_SIZE = 20
 
 
 parser = argparse.ArgumentParser()
@@ -61,6 +59,9 @@ class App:
         self.playing_song: PlayObject | None = None
         self.is_playing = False
 
+        self.audio_file_per_peer: Dict[socket.socket, bytes] = dict()
+        self.chunks_per_peer: Dict[socket.socket, List[Data]] = dict()
+
     def __handle_commands(self, conn: socket.socket, data: Data) -> None:
         data_type = data.type
         if data_type == DataType.GET_DATA:
@@ -87,7 +88,7 @@ class App:
             self.addrs.pop(idx)
             self.peers.pop(idx)
         elif data_type == DataType.CHUNKS_INFO:
-            chunks_per_peer[conn] = data.data
+            self.chunks_per_peer[conn] = data.data
             self.__get_chunks(conn, data.data)
         elif data_type == DataType.USER_INPUT:
             reply = Data(type=DataType.INFO, data="server received user input")
@@ -123,7 +124,9 @@ class App:
 
         song_len = len(export_bytes)
 
-        if song_len % CHUNK_SIZE_SEND == 0:
+        if song_len <= CHUNK_SIZE_SEND:
+            total_chunks = 1
+        elif song_len % CHUNK_SIZE_SEND == 0:
             total_chunks = (song_len / CHUNK_SIZE_SEND) - 1
         else:
             total_chunks = (song_len // CHUNK_SIZE_SEND) - 1
@@ -135,7 +138,6 @@ class App:
                 total_chunks=total_chunks - 1,
                 data=str(export_bytes[i * CHUNK_SIZE_SEND : (i + 1) * CHUNK_SIZE_SEND]),
             )
-
             chunk = Data(type=DataType.CHUNK_MP3, data=data_mp3)
             chunk_json = chunk.model_dump_json().encode()
             chunks.append(chunk_json)
@@ -144,6 +146,7 @@ class App:
             type=DataType.CHUNKS_INFO, data=[len(chunk) for chunk in chunks]
         )
         chunks_info_json = chunks_info.model_dump_json().encode()
+
 
         for peer in self.peers:
             peer.sendall(chunks_info_json)
@@ -174,7 +177,7 @@ class App:
     def __add_audio(self, song) -> None:
         self.audio_files.append(song)
 
-        if len(self.audio_files) == 21:
+        if len(self.audio_files) > AUDIO_QUEUE_SIZE:
             self.audio_files.pop(0)
         if len(self.audio_files) == 1 and self.playing_song is None:
             self.playing_song_idx = 0
@@ -222,9 +225,9 @@ class App:
             chunk = ast.literal_eval(data_mp3.data)
 
             if i == 0:
-                audio_file_per_peer[conn] = chunk
+                self.audio_file_per_peer[conn] = chunk
             elif i <= data_mp3.total_chunks:
-                audio_file_per_peer[conn] += chunk
+                self.audio_file_per_peer[conn] += chunk
 
         data = conn.recv(CHUNK_SIZE_RECV).decode()
 
@@ -232,23 +235,66 @@ class App:
             data = Data.model_validate_json(data)
         except _pydantic_core.ValidationError:
             print(f"App received invalid audio data {data}")
-            chunks_per_peer.pop(conn)
+            self.chunks_per_peer.pop(conn)
             return
 
         if data.type != DataType.SONG_INFO:
             print(f"App received invalid audio data {data}")
-            chunks_per_peer.pop(conn)
+            self.chunks_per_peer.pop(conn)
             return
 
         is_playing, timestamp = data.data
 
         if is_playing:
-            audio_bytes = BytesIO(audio_file_per_peer[conn])
+            audio_bytes = BytesIO(self.audio_file_per_peer[conn])
             song = AudioSegment.from_mp3(audio_bytes)
             self.__add_audio(song[timestamp:])
-            chunks_per_peer.pop(conn)
+            self.chunks_per_peer.pop(conn)
+        # else:
+        #     audio_bytes = BytesIO(self.audio_file_per_peer[conn])
+        #     song = AudioSegment.from_mp3(audio_bytes)
+        #     self.__add_audio(song[timestamp:])
+        #     self.chunks_per_peer.pop(conn)
 
         print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
+
+    def __play_next_song(self) -> None:
+        if len(self.audio_files) <= self.playing_song_idx + 1:
+            self.playing_song_idx = 0
+        else:
+            self.playing_song_idx += 1
+
+        self.playing_song = playback._play_with_simpleaudio(
+            self.audio_files[self.playing_song_idx]
+        )
+
+    def __handle_playback(self) -> None:
+        prev_playing_song_idx: int = -1
+        song_start_time = 0
+
+        while IS_RUNNING:
+            if (
+                prev_playing_song_idx != self.playing_song_idx
+                and self.playing_song_idx - 1
+            ):
+                song_start_time = time.monotonic()
+                prev_playing_song_idx = self.playing_song_idx
+
+            elapsed_time = int((time.monotonic() - song_start_time) * 1000)
+
+            if self.playing_song_idx != -1 and elapsed_time >= len(
+                self.audio_files[self.playing_song_idx]
+            ):
+                if len(self.audio_files) == 1:
+                    self.playing_song = playback._play_with_simpleaudio(
+                        self.audio_files[self.playing_song_idx]
+                    )
+                    prev_playing_song_idx = -1
+                elif len(self.audio_files) > 1:
+                    self.__play_next_song()
+                    song_start_time = time.monotonic()
+
+            sleep(0.1)
 
     def __handle_recv(self) -> None:
         if len(self.peers) == 0:
@@ -349,6 +395,8 @@ class App:
     def host(self) -> None:
         threading.Thread(target=self.__handle_peers).start()
         threading.Thread(target=self.__handle_user_input).start()
+        threading.Thread(target=self.__handle_playback).start()
+
         while True:
             self.sock.listen(1)
             try:
@@ -393,6 +441,7 @@ class App:
 
         threading.Thread(target=self.__handle_peers).start()
         threading.Thread(target=self.__handle_user_input).start()
+        threading.Thread(target=self.__handle_playback).start()
 
         while True:
             self.sock.listen(1)
