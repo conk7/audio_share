@@ -109,9 +109,12 @@ class App:
         SCRIPT_DIR = Path(__file__).parent.parent
         song_path = str(Path(SCRIPT_DIR, song_name))
 
-        print(f"song path: {song_path}")
-
-        song = AudioSegment.from_mp3(song_path)
+        try:
+            song = AudioSegment.from_mp3(song_path)
+        except FileNotFoundError:
+            print(f"Could not find song with path = {song_path}")
+            return
+        
         song -= 30
 
         export_bytes = BytesIO()
@@ -216,7 +219,8 @@ class App:
 
         elif data[:4] == "play":
             song_name = data[5:]
-            self.__send_audio(song_name)
+            if song_name != "":
+                self.__send_audio(song_name)
 
         elif data == "pause":
             self.__pause_audio()
