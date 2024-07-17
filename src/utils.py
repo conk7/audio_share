@@ -35,6 +35,7 @@ class DataType(Enum):
     PAUSE = 8
     RESUME = 9
     SONG_CHANGE = 10
+    SONG_INFO = 11
 
 
 class Data(BaseModel):

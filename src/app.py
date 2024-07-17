@@ -105,7 +105,7 @@ class App:
                 self.playing_song.resume()
                 self.is_playing = True
 
-    def __send_audio(self, song_name: str) -> None:
+    def __send_audio(self, song_name: str, timestamp: int) -> None:
         SCRIPT_DIR = Path(__file__).parent.parent
         song_path = str(Path(SCRIPT_DIR, song_name))
 
@@ -129,7 +129,6 @@ class App:
             total_chunks = (song_len // CHUNK_SIZE_SEND) - 1
 
         chunks = []
-        chunks_info = []
         for i in range(total_chunks):
             data_mp3 = DataMP3(
                 chunk_num=i,
@@ -146,26 +145,33 @@ class App:
         )
         chunks_info_json = chunks_info.model_dump_json().encode()
 
-        for conn in self.peers:
-            conn.sendall(chunks_info_json)
+        for peer in self.peers:
+            peer.sendall(chunks_info_json)
 
         sleep(0.1)
 
         # put it here to minimise playback latency between local host and remote peers
         self.__add_audio(song)
 
-        for conn in self.peers:
+        for peer in self.peers:
             for i, chunk in enumerate(chunks):
-                bytes_sent = conn.send(chunk)
+                bytes_sent = peer.send(chunk)
                 print("", chunk.decode()[2:50])
                 if bytes_sent != chunks_info.data[i]:
                     print(
-                        f"sent {bytes_sent} expected to send {chunks_info_json[i]}. conn {conn}"
+                        f"sent {bytes_sent} expected to send {chunks_info_json[i]}. conn {peer}"
                     )
                     break
                 sleep(0.01)
             else:
-                print(f"successfully sent audio to {conn}")
+                is_playing = True
+                data = Data(type=DataType.SONG_INFO, data=[is_playing, timestamp])
+                data = data.model_dump_json()
+                data = data.encode()
+                peer.sendall(data)
+                print(f"successfully sent audio to {peer}")
+
+        
 
     def __add_audio(self, song) -> None:
         self.audio_files.append(song)
@@ -220,7 +226,7 @@ class App:
         elif data[:4] == "play":
             song_name = data[5:]
             if song_name != "":
-                self.__send_audio(song_name)
+                self.__send_audio(song_name, 0)
 
         elif data == "pause":
             self.__pause_audio()
@@ -248,7 +254,7 @@ class App:
             try:
                 data = Data.model_validate_json(data)
             except _pydantic_core.ValidationError:
-                print(f"Client received invalid audio data, i = {i}, ")
+                print(f"App received invalid audio data, i = {i}")
                 continue
 
             if data.type != DataType.CHUNK_MP3:
@@ -262,15 +268,37 @@ class App:
 
             if i == 0:
                 audio_file_per_peer[conn] = chunk
-            elif i < data_mp3.total_chunks:
+            elif i <= data_mp3.total_chunks:
                 audio_file_per_peer[conn] += chunk
             elif i == data_mp3.total_chunks:
                 audio_bytes = BytesIO(audio_file_per_peer[conn])
                 song = AudioSegment.from_mp3(audio_bytes)
                 self.__add_audio(song)
                 chunks_per_peer.pop(conn)
+        
+        data = conn.recv(CHUNK_SIZE_RECV).decode()
 
-                print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
+        try:
+            data = Data.model_validate_json(data)
+        except _pydantic_core.ValidationError:
+            print(f"App received invalid audio data {data}")
+            chunks_per_peer.pop(conn)
+            return
+        
+        if data.type != DataType.SONG_INFO:
+            print(f"App received invalid audio data {data}")
+            chunks_per_peer.pop(conn)
+            return
+        
+        is_playing, timestamp = data.data
+
+        if is_playing:
+            audio_bytes = BytesIO(audio_file_per_peer[conn])
+            song = AudioSegment.from_mp3(audio_bytes)
+            self.__add_audio(song[timestamp:])
+            chunks_per_peer.pop(conn)
+        
+        print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
 
     def __handle_peers(self) -> None:
         global USER_INPUT, IS_RUNNING
