@@ -12,6 +12,7 @@ pystun3 = "^2.0.0"
 pyaudio = "^0.2.14"
 pydub = "^0.25.1"
 pydantic = "^2.8.2"
+simpleaudio = "^1.0.4"
 
 [build-system]
 requires = ["poetry-core"]
