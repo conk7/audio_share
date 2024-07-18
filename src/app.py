@@ -89,7 +89,7 @@ class App:
             self.peers.pop(idx)
         elif data_type == DataType.CHUNKS_INFO:
             self.chunks_per_peer[conn] = data.data
-            self.__get_chunks(conn, data.data)
+            self.__get_audio(conn, data.data)
         elif data_type == DataType.USER_INPUT:
             reply = Data(type=DataType.INFO, data="server received user input")
             reply_json = reply.model_dump_json()
@@ -105,6 +105,14 @@ class App:
             if self.playing_song is not None and not self.is_playing:
                 self.playing_song.resume()
                 self.is_playing = True
+        elif data_type == DataType.PLAY_NEXT:
+            if self.playing_song is not None:
+                self.playing_song.stop()
+            self.playing_song_idx = data.data
+            self.playing_song = playback._play_with_simpleaudio(
+                self.audio_files[self.playing_song_idx]
+            )
+            self.is_playing = True
 
     def __send_audio(self, song_name: str, timestamp: int) -> None:
         SCRIPT_DIR = Path(__file__).parent.parent
@@ -147,14 +155,18 @@ class App:
         )
         chunks_info_json = chunks_info.model_dump_json().encode()
 
-
         for peer in self.peers:
             peer.sendall(chunks_info_json)
 
         sleep(0.1)
 
+        if self.is_playing:
+            is_playing = False
+        else:
+            is_playing = True
+
         # put it here to minimise playback latency between local host and remote peers
-        self.__add_audio(song)
+        self.__add_audio_to_queue(song, is_playing)
 
         for peer in self.peers:
             for i, chunk in enumerate(chunks):
@@ -167,29 +179,31 @@ class App:
                     break
                 sleep(0.01)
             else:
-                is_playing = True
                 data = Data(type=DataType.SONG_INFO, data=[is_playing, timestamp])
                 data = data.model_dump_json()
                 data = data.encode()
                 peer.sendall(data)
                 print(f"successfully sent audio to {peer}")
 
-    def __add_audio(self, song) -> None:
+    def __add_audio_to_queue(self, song, is_playing: bool) -> None:
         self.audio_files.append(song)
 
         if len(self.audio_files) > AUDIO_QUEUE_SIZE:
             self.audio_files.pop(0)
-        if len(self.audio_files) == 1 and self.playing_song is None:
-            self.playing_song_idx = 0
-            self.playing_song = playback._play_with_simpleaudio(self.audio_files[0])
+
+        if is_playing:
+            self.playing_song_idx = len(self.audio_files) - 1
+            self.playing_song = playback._play_with_simpleaudio(
+                self.audio_files[self.playing_song_idx]
+            )
             self.is_playing = True
 
     def __pause_audio(self) -> None:
         if self.playing_song is not None and self.is_playing:
+            data = Data(type=DataType.PAUSE, data="")
+            data_json = data.model_dump_json()
+            data_json = data_json.encode()
             for peer in self.peers:
-                data = Data(type=DataType.PAUSE, data="")
-                data_json = data.model_dump_json()
-                data_json = data_json.encode()
                 peer.sendall(data_json)
             self.playing_song.pause()
             self.is_playing = False
@@ -204,7 +218,7 @@ class App:
             self.playing_song.resume()
             self.is_playing = True
 
-    def __get_chunks(self, conn: socket.socket, chunk_info: List[Data]) -> None:
+    def __get_audio(self, conn: socket.socket, chunk_info: List[Data]) -> None:
         for i, chunk_len in enumerate(chunk_info):
             data = conn.recv(chunk_len).decode()
             print(f"slice of audio chunk: {data[:50]}")
@@ -245,25 +259,30 @@ class App:
 
         is_playing, timestamp = data.data
 
-        if is_playing:
-            audio_bytes = BytesIO(self.audio_file_per_peer[conn])
-            song = AudioSegment.from_mp3(audio_bytes)
-            self.__add_audio(song[timestamp:])
-            self.chunks_per_peer.pop(conn)
-        # else:
-        #     audio_bytes = BytesIO(self.audio_file_per_peer[conn])
-        #     song = AudioSegment.from_mp3(audio_bytes)
-        #     self.__add_audio(song[timestamp:])
-        #     self.chunks_per_peer.pop(conn)
+        print(f"received with is_playing = {is_playing}")
+
+        audio_bytes = BytesIO(self.audio_file_per_peer[conn])
+        song = AudioSegment.from_mp3(audio_bytes)
+        self.__add_audio_to_queue(song[timestamp:], is_playing)
+        self.chunks_per_peer.pop(conn)
 
         print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
 
     def __play_next_song(self) -> None:
+        print(f"song idx = {self.playing_song_idx}")
         if len(self.audio_files) <= self.playing_song_idx + 1:
             self.playing_song_idx = 0
         else:
             self.playing_song_idx += 1
 
+        data = Data(type=DataType.PLAY_NEXT, data=self.playing_song_idx)
+        data_json = data.model_dump_json()
+        data_json = data_json.encode()
+        for peer in self.peers:
+            peer.sendall(data_json)
+
+        if self.playing_song is not None:
+            self.playing_song.stop()
         self.playing_song = playback._play_with_simpleaudio(
             self.audio_files[self.playing_song_idx]
         )
@@ -275,7 +294,7 @@ class App:
         while IS_RUNNING:
             if (
                 prev_playing_song_idx != self.playing_song_idx
-                and self.playing_song_idx - 1
+                and self.playing_song_idx != -1
             ):
                 song_start_time = time.monotonic()
                 prev_playing_song_idx = self.playing_song_idx
@@ -285,14 +304,9 @@ class App:
             if self.playing_song_idx != -1 and elapsed_time >= len(
                 self.audio_files[self.playing_song_idx]
             ):
-                if len(self.audio_files) == 1:
-                    self.playing_song = playback._play_with_simpleaudio(
-                        self.audio_files[self.playing_song_idx]
-                    )
-                    prev_playing_song_idx = -1
-                elif len(self.audio_files) > 1:
-                    self.__play_next_song()
-                    song_start_time = time.monotonic()
+                self.__play_next_song()
+                song_start_time = time.monotonic()
+                prev_playing_song_idx = -1
 
             sleep(0.1)
 
@@ -326,6 +340,9 @@ class App:
 
         elif data == "resume":
             self.__resume_audio()
+
+        elif data == "next":
+            self.__play_next_song()
 
         elif data != "":
             self.__send_user_input(data)
