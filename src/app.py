@@ -102,7 +102,7 @@ class App:
         elif data_type == DataType.PLAY:
             if self.playing_song is not None and self.is_playing:
                 self.playing_song.stop()
-            
+
             self.playing_song_idx = data.data
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx]
@@ -420,6 +420,7 @@ class App:
             ):
                 self.__play_next_song()
                 prev_playing_song_idx = -1
+                self.song_played_time = 0
 
             prev_time = time.monotonic()
             sleep(0.1)
