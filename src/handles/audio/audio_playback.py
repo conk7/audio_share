@@ -81,7 +81,7 @@ class AudioPlayback:
             if self.state == PlayerStates.PLAYING:
                 self.song_played_time += int((time.monotonic() - prev_time) * 1000)
 
-            # print("audio files", self.audio_files, "self.playing_song_idx = ", self.playing_song_idx)
+
             if self.playing_song_idx != -1 and self.song_played_time >= len(
                 self.audio_files[self.playing_song_idx]
             ):

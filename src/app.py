@@ -30,14 +30,11 @@ class App(PeerHandler):
         self.addrs: List[str] = []
         self.state: PlayerStates = PlayerStates.IDLE
 
-        # AudioSegment.ffmpeg = path_to_ffmpeg()
-        # os.environ["PATH"] += os.pathsep + str(Path(path_to_ffmpeg()).parent)
         init_ffmpeg()
 
         self.audio_files: List[Any] = []
         self.playing_song_idx: int = -1
         self.playing_song: PlayObject | None = None
-        # self.is_playing = False
         self.song_played_time = 0
 
         self.audio_file_per_peer: Dict[socket.socket, bytes] = dict()

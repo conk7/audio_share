@@ -202,12 +202,9 @@ class AudioTransfer:
         )
 
         audio_bytes = BytesIO(self.audio_file_per_peer[conn])
-        # print(f"song len when received {len(audio_bytes.getvalue())}")
         song = AudioSegment.from_mp3(audio_bytes)
         self.add_audio_to_queue(song)
         self.playing_song_idx = playing_song_idx
-
-        # print("audio files", self.audio_files)
 
         if self.playing_song is None and self.playing_song_idx != -1:
             self.playing_song = playback._play_with_simpleaudio(

@@ -38,9 +38,6 @@ class HandleCommands(AudioTransfer, PeerUtils):
         elif data_type == DataType.USER_INPUT:
             reply = Data(type=DataType.INFO, data="server received user input")
             reply_json = reply.model_dump_json()
-
-            # print(f"handle_comms with type {data_type} sent\n {reply_json} to {conn}")
-
             conn.send(reply_json.encode())
         elif data_type == DataType.PLAY:
             if self.playing_song is not None and self.state == PlayerStates.PLAYING:

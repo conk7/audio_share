@@ -24,6 +24,7 @@ def init_ffmpeg():
     AudioSegment.ffmpeg = str(path)
     os.environ["PATH"] += os.pathsep + str(path.parent)
 
+
 def find_free_port(host: str, port: int) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         while s.connect_ex((host, port)) == 0:

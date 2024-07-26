@@ -10,7 +10,6 @@ from ..input.userinput import UserInput
 
 class PeerHandler(HandleCommands, AudioPlayback, UserInput):
     def handle_peers(self) -> None:
-        # global USER_INPUT, IS_RUNNING
         while True:
             self.handle_recv()
             if self.user_input is not None:
