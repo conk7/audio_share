@@ -1,11 +1,12 @@
 import socket
+import os
 
 from argparse import ArgumentParser
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Any
 from enum import Enum
-
+from pydub import AudioSegment
 
 CHUNK_SIZE_SEND = 500 * 1024
 CHUNK_SIZE_RECV = 500 * 1024
@@ -15,8 +16,13 @@ ROOM_SIZE = 5
 
 def path_to_ffmpeg():
     SCRIPT_DIR = Path(__file__).parent.parent
-    return str(Path(SCRIPT_DIR, "common", "ffmpeg", "bin", "ffmpeg.exe"))
+    return Path(SCRIPT_DIR, "common", "ffmpeg", "bin", "ffmpeg.exe")
 
+
+def init_ffmpeg():
+    path = path_to_ffmpeg()
+    AudioSegment.ffmpeg = str(path)
+    os.environ["PATH"] += os.pathsep + str(path.parent)
 
 def find_free_port(host: str, port: int) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

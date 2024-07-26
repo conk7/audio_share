@@ -1,14 +1,11 @@
 import argparse
 import socket
 import threading
-import os
 
 from typing import List, Dict, Any
 from utils import DataType, Data, add_CL_args
 from pydantic_core import _pydantic_core
-from utils import path_to_ffmpeg, CHUNK_SIZE_RECV, ROOM_SIZE, PlayerStates
-from pathlib import Path
-from pydub import AudioSegment
+from utils import init_ffmpeg, CHUNK_SIZE_RECV, ROOM_SIZE, PlayerStates
 from simpleaudio import PlayObject
 from handles.peers.peer_handler import PeerHandler
 
@@ -33,8 +30,9 @@ class App(PeerHandler):
         self.addrs: List[str] = []
         self.state: PlayerStates = PlayerStates.IDLE
 
-        AudioSegment.ffmpeg = path_to_ffmpeg()
-        os.environ["PATH"] += os.pathsep + str(Path(path_to_ffmpeg()).parent)
+        # AudioSegment.ffmpeg = path_to_ffmpeg()
+        # os.environ["PATH"] += os.pathsep + str(Path(path_to_ffmpeg()).parent)
+        init_ffmpeg()
 
         self.audio_files: List[Any] = []
         self.playing_song_idx: int = -1
@@ -47,10 +45,13 @@ class App(PeerHandler):
 
         self.user_input = None
 
-    def host(self) -> None:
+    def run_handler_threads(self) -> None:
         threading.Thread(target=self.handle_peers).start()
         threading.Thread(target=self.handle_user_input).start()
         threading.Thread(target=self.handle_playback).start()
+
+    def host(self) -> None:
+        self.run_handler_threads()
 
         while True:
             self.sock.listen(ROOM_SIZE)
@@ -100,9 +101,7 @@ class App(PeerHandler):
             new_addrs = data.data
             self.addrs.extend(new_addrs)
 
-        threading.Thread(target=self.handle_peers).start()
-        threading.Thread(target=self.handle_user_input).start()
-        threading.Thread(target=self.handle_playback).start()
+        self.run_handler_threads()
 
         while True:
             self.sock.listen(ROOM_SIZE)
