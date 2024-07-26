@@ -6,17 +6,11 @@ import os
 from typing import List, Dict, Any
 from utils import DataType, Data, add_CL_args
 from pydantic_core import _pydantic_core
-from utils import path_to_ffmpeg, CHUNK_SIZE_RECV, ROOM_SIZE
+from utils import path_to_ffmpeg, CHUNK_SIZE_RECV, ROOM_SIZE, PlayerStates
 from pathlib import Path
 from pydub import AudioSegment
 from simpleaudio import PlayObject
 from handles.peers.peer_handler import PeerHandler
-
-
-class PlayerStates:
-    IDLE = 0
-    PLAYING = 1
-    PAUSED = 2
 
 
 parser = argparse.ArgumentParser()
@@ -37,7 +31,7 @@ class App(PeerHandler):
 
         self.peers: List[socket.socket] = []
         self.addrs: List[str] = []
-        self.state = PlayerStates.IDLE
+        self.state: PlayerStates = PlayerStates.IDLE
 
         AudioSegment.ffmpeg = path_to_ffmpeg()
         os.environ["PATH"] += os.pathsep + str(Path(path_to_ffmpeg()).parent)
@@ -45,13 +39,12 @@ class App(PeerHandler):
         self.audio_files: List[Any] = []
         self.playing_song_idx: int = -1
         self.playing_song: PlayObject | None = None
-        self.is_playing = False
+        # self.is_playing = False
         self.song_played_time = 0
 
         self.audio_file_per_peer: Dict[socket.socket, bytes] = dict()
         self.chunks_per_peer: Dict[socket.socket, List[Data]] = dict()
 
-        self.is_running = True
         self.user_input = None
 
     def host(self) -> None:

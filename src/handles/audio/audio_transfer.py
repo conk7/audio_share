@@ -3,7 +3,7 @@ import socket
 
 from typing import List
 from time import sleep
-from utils import DataType, Data, DataMP3, CHUNK_SIZE_SEND, CHUNK_SIZE_RECV, AUDIO_QUEUE_SIZE
+from utils import DataType, Data, DataMP3, CHUNK_SIZE_SEND, CHUNK_SIZE_RECV, AUDIO_QUEUE_SIZE, PlayerStates
 from pydantic_core import _pydantic_core
 from pathlib import Path
 from pydub import AudioSegment, playback
@@ -59,7 +59,7 @@ class AudioTransfer:
 
         sleep(0.1)
 
-        if self.is_playing:
+        if self.state == PlayerStates.PLAYING:
             is_playing = False
         else:
             is_playing = True
@@ -127,7 +127,7 @@ class AudioTransfer:
 
             sleep(0.1)
 
-            if n == self.playing_song_idx and self.is_playing:
+            if n == self.playing_song_idx and self.state == PlayerStates.PLAYING:
                 is_playing = True
             else:
                 is_playing = False
@@ -214,10 +214,10 @@ class AudioTransfer:
                 self.audio_files[self.playing_song_idx][timestamp:]
             )
             if is_playing:
-                self.is_playing = is_playing
+                self.state = PlayerStates.PLAYING
             else:
                 self.playing_song.pause()
-                self.is_playing = is_playing
+                self.state = PlayerStates.PAUSED
 
         self.chunks_per_peer.pop(conn)
 

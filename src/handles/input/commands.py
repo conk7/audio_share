@@ -1,6 +1,6 @@
 import socket
 
-from utils import DataType, Data
+from utils import DataType, Data, PlayerStates
 from pydub import playback
 from ..peers.peers_utils import PeerUtils
 from ..audio.audio_transfer import AudioTransfer
@@ -43,22 +43,22 @@ class HandleCommands(AudioTransfer, PeerUtils):
 
             conn.send(reply_json.encode())
         elif data_type == DataType.PLAY:
-            if self.playing_song is not None and self.is_playing:
+            if self.playing_song is not None and self.state == PlayerStates.PLAYING:
                 self.playing_song.stop()
 
             self.playing_song_idx = data.data
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx]
             )
-            self.is_playing = True
+            self.state = PlayerStates.PLAYING
         elif data_type == DataType.PAUSE:
-            if self.playing_song is not None and self.is_playing:
+            if self.playing_song is not None and self.state == PlayerStates.PLAYING:
                 self.playing_song.pause()
-                self.is_playing = False
+                self.state = PlayerStates.PAUSED
         elif data_type == DataType.RESUME:
-            if self.playing_song is not None and not self.is_playing:
+            if self.playing_song is not None and self.state == PlayerStates.PAUSED:
                 self.playing_song.resume()
-                self.is_playing = True
+                self.state = PlayerStates.PLAYING
         elif data_type == DataType.PLAY_NEXT:
             if self.playing_song is not None:
                 self.playing_song.stop()
@@ -66,4 +66,4 @@ class HandleCommands(AudioTransfer, PeerUtils):
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx]
             )
-            self.is_playing = True
+            self.state = PlayerStates.PLAYING

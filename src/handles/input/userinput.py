@@ -3,7 +3,7 @@ from utils import DataType, Data
 
 class UserInput:
     def handle_user_input(self) -> None:
-        while self.is_running:
+        while True:
             self.user_input = input().strip().lower()
 
     def send_user_input(self, data: str) -> None:

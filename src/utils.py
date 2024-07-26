@@ -12,6 +12,7 @@ CHUNK_SIZE_RECV = 500 * 1024
 AUDIO_QUEUE_SIZE = 20
 ROOM_SIZE = 5
 
+
 def path_to_ffmpeg():
     SCRIPT_DIR = Path(__file__).parent.parent
     return str(Path(SCRIPT_DIR, "common", "ffmpeg", "bin", "ffmpeg.exe"))
@@ -32,6 +33,12 @@ def add_CL_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument("--rhost", type=str, help="Remote host address e.g. IPv4:PORT")
 
     return parser
+
+
+class PlayerStates(Enum):
+    IDLE = 0
+    PLAYING = 1
+    PAUSED = 2
 
 
 class DataType(Enum):

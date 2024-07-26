@@ -31,8 +31,6 @@ class PeerUtils:
             print(f"sent {data[:50]} to {conn}")
             conn.sendall(data)
 
-        self.is_running = False
-
         for conn in self.peers:
             conn.close()
         self.peers.clear()
