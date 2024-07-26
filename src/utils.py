@@ -1,9 +1,20 @@
-from argparse import ArgumentParser
 import socket
 
+from argparse import ArgumentParser
+from pathlib import Path
 from pydantic import BaseModel
 from typing import Any
 from enum import Enum
+
+
+CHUNK_SIZE_SEND = 500 * 1024
+CHUNK_SIZE_RECV = 500 * 1024
+AUDIO_QUEUE_SIZE = 20
+ROOM_SIZE = 5
+
+def path_to_ffmpeg():
+    SCRIPT_DIR = Path(__file__).parent.parent
+    return str(Path(SCRIPT_DIR, "common", "ffmpeg", "bin", "ffmpeg.exe"))
 
 
 def find_free_port(host: str, port: int) -> int:
