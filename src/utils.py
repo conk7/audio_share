@@ -42,6 +42,15 @@ def add_CL_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
+def get_chunks_num(song_len) -> int:
+    if song_len <= CHUNK_SIZE_SEND:
+        return 1
+    elif song_len % CHUNK_SIZE_SEND == 0:
+        return (song_len / CHUNK_SIZE_SEND) - 1
+    else:
+        return (song_len // CHUNK_SIZE_SEND) - 1
+
+
 class PlayerStates(Enum):
     IDLE = 0
     PLAYING = 1
@@ -59,8 +68,8 @@ class DataType(Enum):
     CHUNKS_INFO = 7
     PAUSE = 8
     RESUME = 9
-    SONG_CHANGE = 10
     SONG_INFO = 11
+    SONG_CHANGE = 10
     PLAY_NEXT = 12
     PLAY = 13
 
@@ -74,3 +83,9 @@ class DataMP3(BaseModel):
     chunk_num: int
     total_chunks: int
     data: Any
+
+
+class SongInfo(BaseModel):
+    song_idx: int
+    is_playing: bool
+    timestamp: int

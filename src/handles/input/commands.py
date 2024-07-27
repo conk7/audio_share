@@ -22,7 +22,7 @@ class HandleCommands(AudioTransfer, PeerUtils):
             conn.sendall(reply_json)
 
             if len(self.audio_files) > 0:
-                self.send_all_audio(conn)
+                self.sync_audio(conn)
 
         elif data_type == DataType.CONNECT:
             addr = data.data

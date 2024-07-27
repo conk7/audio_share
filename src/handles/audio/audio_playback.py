@@ -2,14 +2,33 @@ import time
 
 from time import sleep
 from utils import DataType, Data, PlayerStates
-from pydub import playback
+from pydub import AudioSegment, playback
+from pathlib import Path
+from .audio_utils import AudioUtils
 
 
-class AudioPlayback:
+class AudioPlayback(AudioUtils):
+    def add_audio(self, song_name):
+        SCRIPT_DIR = Path(__file__).parent.parent.parent.parent
+        song_path = str(Path(SCRIPT_DIR, song_name))
+
+        try:
+            song = AudioSegment.from_mp3(song_path)
+        except FileNotFoundError:
+            print(f"Could not find song with path {song_path}")
+            return
+
+        song -= 30
+
+        self.add_to_queue(song)
+
+        return song
+
     def play_audio(self, idx: int) -> None:
         if (
-            self.state == PlayerStates.PLAYING or idx >= len(self.audio_files) or idx < 0
-        ):  # 0 <= idx <= len()
+            self.state == PlayerStates.PLAYING
+            or not 0 <= idx < len(self.audio_files)
+        ):
             return
 
         data = Data(type=DataType.PLAY, data=idx)
@@ -54,7 +73,7 @@ class AudioPlayback:
             self.playing_song_idx += 1
 
         self.song_played_time = 0
-        
+
         data = Data(type=DataType.PLAY_NEXT, data=self.playing_song_idx)
         data_json = data.model_dump_json()
         data_json = data_json.encode()
@@ -66,7 +85,6 @@ class AudioPlayback:
         self.playing_song = playback._play_with_simpleaudio(
             self.audio_files[self.playing_song_idx]
         )
-
 
     def handle_playback(self) -> None:
         prev_playing_song_idx: int = -1
@@ -81,7 +99,6 @@ class AudioPlayback:
 
             if self.state == PlayerStates.PLAYING:
                 self.song_played_time += int((time.monotonic() - prev_time) * 1000)
-
 
             if self.playing_song_idx != -1 and self.song_played_time >= len(
                 self.audio_files[self.playing_song_idx]

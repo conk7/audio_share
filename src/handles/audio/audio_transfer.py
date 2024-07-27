@@ -3,40 +3,37 @@ import socket
 
 from typing import List
 from time import sleep
-from utils import DataType, Data, DataMP3, CHUNK_SIZE_SEND, CHUNK_SIZE_RECV, AUDIO_QUEUE_SIZE, PlayerStates
+from utils import (
+    DataType,
+    Data,
+    DataMP3,
+    SongInfo,
+    CHUNK_SIZE_SEND,
+    CHUNK_SIZE_RECV,
+    PlayerStates,
+    get_chunks_num,
+)
 from pydantic_core import _pydantic_core
-from pathlib import Path
 from pydub import AudioSegment, playback
 from io import BytesIO
+from .audio_utils import AudioUtils
 
 
-class AudioTransfer:
-    def send_audio(self, song_name: str, timestamp: int) -> None:
-        SCRIPT_DIR = Path(__file__).parent.parent.parent.parent
-        song_path = str(Path(SCRIPT_DIR, song_name))
-
-        try:
-            song = AudioSegment.from_mp3(song_path)
-        except FileNotFoundError:
-            print(f"Could not find song with path {song_path}")
-            return
-
-        song -= 30
-
+class AudioTransfer(AudioUtils):
+    def send_audio(
+        self,
+        song: str,
+        is_playing: bool,
+        timestamp: int = 0,
+        addr: socket.socket | None = None,
+    ) -> None:
         export_bytes = BytesIO()
         song.export(export_bytes, format="mp3")
         export_bytes = export_bytes.getvalue()
-
         song_len = len(export_bytes)
+        total_chunks = get_chunks_num(song_len)
 
         print(f"song len = {song_len}, slice of export bytes {export_bytes[:20]}")
-
-        if song_len <= CHUNK_SIZE_SEND:
-            total_chunks = 1
-        elif song_len % CHUNK_SIZE_SEND == 0:
-            total_chunks = (song_len / CHUNK_SIZE_SEND) - 1
-        else:
-            total_chunks = (song_len // CHUNK_SIZE_SEND) - 1
 
         chunks = []
         for i in range(total_chunks):
@@ -54,20 +51,21 @@ class AudioTransfer:
         )
         chunks_info_json = chunks_info.model_dump_json().encode()
 
-        for peer in self.peers:
+        if addr is None:
+            peers = self.peers
+            if self.state == PlayerStates.PLAYING:
+                is_playing = False
+            else:
+                is_playing = True
+        else:
+            peers = [addr]
+
+        for peer in peers:
             peer.sendall(chunks_info_json)
 
         sleep(0.1)
 
-        if self.state == PlayerStates.PLAYING:
-            is_playing = False
-        else:
-            is_playing = True
-
-        # put it here to minimise playback latency between local host and remote peers
-        self.add_audio_to_queue(song)
-
-        for peer in self.peers:
+        for peer in peers:
             for i, chunk in enumerate(chunks):
                 bytes_sent = peer.send(chunk)
                 print("", chunk.decode()[2:50])
@@ -80,82 +78,37 @@ class AudioTransfer:
             else:
                 data = Data(
                     type=DataType.SONG_INFO,
-                    data=[is_playing, timestamp, self.playing_song_idx],
-                )
-                data = data.model_dump_json()
-                data = data.encode()
-                peer.sendall(data)
-                print(f"successfully sent audio to {peer}")
-
-    def send_all_audio(self, peer: socket.socket) -> None:
-        for n, audio in enumerate(self.audio_files):
-            export_bytes = BytesIO()
-            audio.export(export_bytes, format="mp3")
-            export_bytes = export_bytes.getvalue()
-            song_len = len(export_bytes)
-
-            print(f"song len = {song_len}, slice of export bytes {export_bytes[:20]}")
-
-            if song_len <= CHUNK_SIZE_SEND:
-                total_chunks = 1
-            elif song_len % CHUNK_SIZE_SEND == 0:
-                total_chunks = (song_len / CHUNK_SIZE_SEND) - 1
-            else:
-                total_chunks = (song_len // CHUNK_SIZE_SEND) - 1
-
-            print(f"total num of chunks = {total_chunks}")
-
-            chunks = []
-            for i in range(total_chunks):
-                data_mp3 = DataMP3(
-                    chunk_num=i,
-                    total_chunks=total_chunks,
-                    data=str(
-                        export_bytes[i * CHUNK_SIZE_SEND : (i + 1) * CHUNK_SIZE_SEND]
+                    data=SongInfo(
+                        song_idx=self.playing_song_idx,
+                        is_playing=is_playing,
+                        timestamp=timestamp,
                     ),
                 )
-                chunk = Data(type=DataType.CHUNK_MP3, data=data_mp3)
-                chunk_json = chunk.model_dump_json().encode()
-                chunks.append(chunk_json)
-
-            chunks_info = Data(
-                type=DataType.CHUNKS_INFO, data=[len(chunk) for chunk in chunks]
-            )
-            chunks_info_json = chunks_info.model_dump_json().encode()
-
-            peer.sendall(chunks_info_json)
-
-            sleep(0.1)
-
-            if n == self.playing_song_idx and self.state == PlayerStates.PLAYING:
-                is_playing = True
-            else:
-                is_playing = False
-
-            timestamp = self.song_played_time
-
-            for i, chunk in enumerate(chunks):
-                bytes_sent = peer.send(chunk)
-                print("", chunk.decode()[2:50])
-                if bytes_sent != chunks_info.data[i]:
-                    print(
-                        f"sent {bytes_sent} expected to send {chunks_info_json[i]}. conn {peer}"
-                    )
-                    break
-                sleep(0.01)
-            else:
-                data = Data(
-                    type=DataType.SONG_INFO,
-                    data=[is_playing, timestamp, self.playing_song_idx],
-                )
                 data = data.model_dump_json()
                 data = data.encode()
                 peer.sendall(data)
                 print(f"successfully sent audio to {peer}")
+
+    def sync_audio(self, peer: socket.socket) -> None:
+        for n, song in enumerate(self.audio_files):
+            if n == self.playing_song_idx and self.state == PlayerStates.PLAYING:
+                is_playing = True
+                timestamp = (
+                    self.song_played_time + 900
+                )  # add some ms to compensate latency
+                self.send_audio(song, is_playing, timestamp, peer)
+            else:
+                is_playing = False
+                timestamp = 0
+                self.send_audio(song, is_playing, timestamp, peer)
 
             sleep(0.1)
 
     def get_audio(self, conn: socket.socket, chunk_info: List[Data]) -> None:
+        self.get_chunks(conn, chunk_info)
+        self.get_audio_info(conn)
+
+    def get_chunks(self, conn: socket.socket, chunk_info: List[Data]) -> None:
         print(f"received chunk_info {chunk_info}")
         for i, chunk_len in enumerate(chunk_info, 1):
             data = conn.recv(chunk_len).decode()
@@ -181,6 +134,7 @@ class AudioTransfer:
             elif i <= data_mp3.total_chunks:
                 self.audio_file_per_peer[conn] += chunk
 
+    def get_audio_info(self, conn: socket.socket) -> None:
         data = conn.recv(CHUNK_SIZE_RECV).decode()
 
         try:
@@ -195,7 +149,10 @@ class AudioTransfer:
             self.chunks_per_peer.pop(conn)
             return
 
-        is_playing, timestamp, playing_song_idx = data.data
+        song_info: SongInfo = SongInfo.model_validate(data.data)
+        playing_song_idx = song_info.song_idx
+        is_playing = song_info.is_playing
+        timestamp = song_info.timestamp
 
         print(
             f"received with is_playing = {is_playing} and idx = {self.playing_song_idx}"
@@ -203,7 +160,7 @@ class AudioTransfer:
 
         audio_bytes = BytesIO(self.audio_file_per_peer[conn])
         song = AudioSegment.from_mp3(audio_bytes)
-        self.add_audio_to_queue(song)
+        self.add_to_queue(song)
         self.playing_song_idx = playing_song_idx
 
         if self.playing_song is None and self.playing_song_idx != -1:
@@ -219,9 +176,3 @@ class AudioTransfer:
         self.chunks_per_peer.pop(conn)
 
         print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
-
-    def add_audio_to_queue(self, song) -> None:
-        self.audio_files.append(song)
-
-        if len(self.audio_files) > AUDIO_QUEUE_SIZE:
-            self.audio_files.pop(0)

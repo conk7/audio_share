@@ -2,13 +2,13 @@ import argparse
 import socket
 import threading
 
-from typing import List, Dict, Any
+from typing import List, Dict
 from utils import DataType, Data, add_CL_args
 from pydantic_core import _pydantic_core
 from utils import init_ffmpeg, CHUNK_SIZE_RECV, ROOM_SIZE, PlayerStates
 from simpleaudio import PlayObject
 from handles.peers.peer_handler import PeerHandler
-
+from pydub import AudioSegment
 
 parser = argparse.ArgumentParser()
 parser = add_CL_args(parser)
@@ -32,7 +32,7 @@ class App(PeerHandler):
 
         init_ffmpeg()
 
-        self.audio_files: List[Any] = []
+        self.audio_files: List[AudioSegment] = []
         self.playing_song_idx: int = -1
         self.playing_song: PlayObject | None = None
         self.song_played_time = 0
