@@ -53,6 +53,8 @@ class AudioPlayback:
         else:
             self.playing_song_idx += 1
 
+        self.song_played_time = 0
+        
         data = Data(type=DataType.PLAY_NEXT, data=self.playing_song_idx)
         data_json = data.model_dump_json()
         data_json = data_json.encode()
@@ -65,7 +67,6 @@ class AudioPlayback:
             self.audio_files[self.playing_song_idx]
         )
 
-        self.song_played_time = 0
 
     def handle_playback(self) -> None:
         prev_playing_song_idx: int = -1

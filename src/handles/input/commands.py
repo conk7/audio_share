@@ -59,6 +59,7 @@ class HandleCommands(AudioTransfer, PeerUtils):
         elif data_type == DataType.PLAY_NEXT:
             if self.playing_song is not None:
                 self.playing_song.stop()
+            self.song_played_time = 0
             self.playing_song_idx = data.data
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx]
