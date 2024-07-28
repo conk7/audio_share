@@ -7,7 +7,7 @@ class AudioUtils:
         if len(self.audio_files) > AUDIO_QUEUE_SIZE:
             self.audio_files.pop(0)
 
-    def stop_audio(self) -> None:
+    def stop_playback(self) -> None:
         if self.playing_song is not None:
             self.playing_song.stop()
             self.song_played_time = 0

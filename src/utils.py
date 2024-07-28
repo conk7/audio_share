@@ -72,6 +72,7 @@ class DataType(Enum):
     SONG_CHANGE = 10
     PLAY_NEXT = 12
     PLAY = 13
+    STOP = 14
 
 
 class Data(BaseModel):

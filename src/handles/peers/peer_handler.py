@@ -59,10 +59,13 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
             self.resume_audio()
 
         elif data == "next":
-            self.play_next_song()
+            self.play_next_audio()
         
         elif data == "prev":
-            self.play_prev_song()
+            self.play_prev_audio()
+
+        elif data == "stop":
+            self.stop_audio()
 
         elif data != "":
             self.send_user_input(data)

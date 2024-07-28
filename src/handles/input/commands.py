@@ -40,7 +40,7 @@ class HandleCommands(AudioTransfer, PeerUtils):
             reply_json = reply.model_dump_json()
             conn.send(reply_json.encode())
         elif data_type == DataType.PLAY:
-            self.stop_audio()
+            self.stop_playback()
             self.playing_song_idx = data.data
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx]
@@ -55,9 +55,11 @@ class HandleCommands(AudioTransfer, PeerUtils):
                 self.playing_song.resume()
                 self.state = PlayerStates.PLAYING
         elif data_type == DataType.PLAY_NEXT:
-            self.stop_audio()
+            self.stop_playback()
             self.playing_song_idx = data.data
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx]
             )
             self.state = PlayerStates.PLAYING
+        elif data_type == DataType.STOP:
+            self.stop_playback()
