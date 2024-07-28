@@ -2,7 +2,7 @@ import select
 
 from time import sleep
 from utils import Data, CHUNK_SIZE_RECV
-from pydantic_core import _pydantic_core
+from pydantic_core._pydantic_core import ValidationError
 from ..input.commands import HandleCommands
 from ..audio.audio_playback import AudioPlayback
 from ..input.userinput import UserInput
@@ -30,7 +30,7 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
 
             try:
                 data = Data.model_validate_json(data)
-            except _pydantic_core.ValidationError:
+            except ValidationError:
                 print("App received invalid data")
                 continue
             self.handle_commands(conn, data)
@@ -43,7 +43,7 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
             song_name = data[4:]
             if song_name != "":
                 song = self.add_audio(song_name)
-                self.send_audio(song, False)
+                self.send_audio(song, len(self.audio_files), False)
 
         elif data[:4] == "play":
             song_idx = data[5:]
@@ -60,6 +60,9 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
 
         elif data == "next":
             self.play_next_song()
+        
+        elif data == "prev":
+            self.play_prev_song()
 
         elif data != "":
             self.send_user_input(data)

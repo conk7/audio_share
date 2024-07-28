@@ -23,6 +23,7 @@ class AudioTransfer(AudioUtils):
     def send_audio(
         self,
         song: str,
+        song_idx: int,
         is_playing: bool,
         timestamp: int = 0,
         addr: socket.socket | None = None,
@@ -79,7 +80,7 @@ class AudioTransfer(AudioUtils):
                 data = Data(
                     type=DataType.SONG_INFO,
                     data=SongInfo(
-                        song_idx=self.playing_song_idx,
+                        song_idx=song_idx,
                         is_playing=is_playing,
                         timestamp=timestamp,
                     ),
@@ -96,11 +97,11 @@ class AudioTransfer(AudioUtils):
                 timestamp = (
                     self.song_played_time + 900
                 )  # add some ms to compensate latency
-                self.send_audio(song, is_playing, timestamp, peer)
+                self.send_audio(song, n, is_playing, timestamp, peer)
             else:
                 is_playing = False
                 timestamp = 0
-                self.send_audio(song, is_playing, timestamp, peer)
+                self.send_audio(song, n, is_playing, timestamp, peer)
 
             sleep(0.1)
 
@@ -161,7 +162,9 @@ class AudioTransfer(AudioUtils):
         audio_bytes = BytesIO(self.audio_file_per_peer[conn])
         song = AudioSegment.from_mp3(audio_bytes)
         self.add_to_queue(song)
-        self.playing_song_idx = playing_song_idx
+
+        if is_playing:
+            self.playing_song_idx = playing_song_idx
 
         if self.playing_song is None and self.playing_song_idx != -1:
             self.playing_song = playback._play_with_simpleaudio(

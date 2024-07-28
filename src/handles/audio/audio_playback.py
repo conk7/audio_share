@@ -25,11 +25,11 @@ class AudioPlayback(AudioUtils):
         return song
 
     def play_audio(self, idx: int) -> None:
-        if (
-            self.state == PlayerStates.PLAYING
-            or not 0 <= idx < len(self.audio_files)
-        ):
+        if not 0 <= idx < len(self.audio_files):
             return
+
+        if self.state == PlayerStates.PLAYING:
+            self.stop_audio()
 
         data = Data(type=DataType.PLAY, data=idx)
         data_json = data.model_dump_json()
@@ -67,10 +67,26 @@ class AudioPlayback(AudioUtils):
             self.state = PlayerStates.PLAYING
 
     def play_next_song(self) -> None:
-        if len(self.audio_files) <= self.playing_song_idx + 1:
-            self.playing_song_idx = 0
-        else:
-            self.playing_song_idx += 1
+        self.playing_song_idx += 1
+        self.playing_song_idx %= len(self.audio_files)
+
+        self.song_played_time = 0
+
+        data = Data(type=DataType.PLAY_NEXT, data=self.playing_song_idx)
+        data_json = data.model_dump_json()
+        data_json = data_json.encode()
+        for peer in self.peers:
+            peer.sendall(data_json)
+
+        if self.playing_song is not None:
+            self.playing_song.stop()
+        self.playing_song = playback._play_with_simpleaudio(
+            self.audio_files[self.playing_song_idx]
+        )
+
+    def play_prev_song(self) -> None:
+        self.playing_song_idx -= 1
+        self.playing_song_idx %= len(self.audio_files)
 
         self.song_played_time = 0
 
