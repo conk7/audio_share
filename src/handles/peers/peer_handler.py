@@ -43,7 +43,7 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
             song_name = data[4:]
             if song_name != "":
                 song = self.add_audio(song_name)
-                self.send_audio(song, len(self.audio_files), False)
+                self.send_audio(song, len(self.audio_files) - 1, False)
 
         elif data[:4] == "play":
             song_idx = data[5:]

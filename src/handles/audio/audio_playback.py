@@ -67,11 +67,12 @@ class AudioPlayback(AudioUtils):
             self.state = PlayerStates.PLAYING
 
     def play_next_audio(self) -> None:
+        if len(self.audio_files) == 0:
+            return
+
         self.playing_song_idx += 1
         self.playing_song_idx %= len(self.audio_files)
 
-        self.song_played_time = 0
-
         data = Data(type=DataType.PLAY_NEXT, data=self.playing_song_idx)
         data_json = data.model_dump_json()
         data_json = data_json.encode()
@@ -84,12 +85,16 @@ class AudioPlayback(AudioUtils):
             self.audio_files[self.playing_song_idx]
         )
 
+        self.song_played_time = 0
+        self.state = PlayerStates.PLAYING
+
     def play_prev_audio(self) -> None:
+        if len(self.audio_files) == 0:
+            return
+
         self.playing_song_idx -= 1
         self.playing_song_idx %= len(self.audio_files)
 
-        self.song_played_time = 0
-
         data = Data(type=DataType.PLAY_NEXT, data=self.playing_song_idx)
         data_json = data.model_dump_json()
         data_json = data_json.encode()
@@ -101,6 +106,9 @@ class AudioPlayback(AudioUtils):
         self.playing_song = playback._play_with_simpleaudio(
             self.audio_files[self.playing_song_idx]
         )
+
+        self.song_played_time = 0
+        self.state = PlayerStates.PLAYING
 
     def stop_audio(self) -> None:
         data = Data(type=DataType.STOP, data=self.playing_song_idx)
@@ -126,9 +134,9 @@ class AudioPlayback(AudioUtils):
             if self.state == PlayerStates.PLAYING:
                 self.song_played_time += int((time.monotonic() - prev_time) * 1000)
 
-            if self.playing_song_idx != -1 and self.song_played_time >= len(
-                self.audio_files[self.playing_song_idx]
-            ):
+            if 0 <= self.playing_song_idx < len(
+                self.audio_files
+            ) and self.song_played_time >= len(self.audio_files[self.playing_song_idx]):
                 self.play_next_audio()
                 prev_playing_song_idx = -1
                 self.song_played_time = 0

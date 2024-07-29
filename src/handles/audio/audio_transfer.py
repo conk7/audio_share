@@ -55,9 +55,9 @@ class AudioTransfer(AudioUtils):
         if addr is None:
             peers = self.peers
             if self.state == PlayerStates.PLAYING:
-                is_playing = False
-            else:
                 is_playing = True
+            else:
+                is_playing = False
         else:
             peers = [addr]
 
@@ -142,12 +142,12 @@ class AudioTransfer(AudioUtils):
             data = Data.model_validate_json(data)
         except _pydantic_core.ValidationError:
             print(f"App received invalid audio data {data[:70]}")
-            self.chunks_per_peer.pop(conn)
+            self.audio_file_per_peer.pop(conn)
             return
 
         if data.type != DataType.SONG_INFO:
             print(f"App received audio data of wrong type {data[:50]}")
-            self.chunks_per_peer.pop(conn)
+            self.audio_file_per_peer.pop(conn)
             return
 
         song_info: SongInfo = SongInfo.model_validate(data.data)
@@ -156,7 +156,7 @@ class AudioTransfer(AudioUtils):
         timestamp = song_info.timestamp
 
         print(
-            f"received with is_playing = {is_playing} and idx = {self.playing_song_idx}"
+            f"received with is_playing = {is_playing} and idx = {playing_song_idx}"
         )
 
         audio_bytes = BytesIO(self.audio_file_per_peer[conn])
@@ -176,6 +176,6 @@ class AudioTransfer(AudioUtils):
                 self.playing_song.pause()
                 self.state = PlayerStates.PAUSED
 
-        self.chunks_per_peer.pop(conn)
+        self.audio_file_per_peer.pop(conn)
 
         print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")

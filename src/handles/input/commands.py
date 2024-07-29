@@ -33,12 +33,11 @@ class HandleCommands(AudioTransfer, PeerUtils):
             self.addrs.pop(idx)
             self.peers.pop(idx)
         elif data_type == DataType.CHUNKS_INFO:
-            self.chunks_per_peer[conn] = data.data
             self.get_audio(conn, data.data)
-        elif data_type == DataType.USER_INPUT:
-            reply = Data(type=DataType.INFO, data="server received user input")
-            reply_json = reply.model_dump_json()
-            conn.send(reply_json.encode())
+        # elif data_type == DataType.USER_INPUT:
+            # reply = Data(type=DataType.INFO, data="server received user input")
+            # reply_json = reply.model_dump_json()
+            # conn.send(reply_json.encode())
         elif data_type == DataType.PLAY:
             self.stop_playback()
             self.playing_song_idx = data.data
