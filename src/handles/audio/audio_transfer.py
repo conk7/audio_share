@@ -155,9 +155,7 @@ class AudioTransfer(AudioUtils):
         is_playing = song_info.is_playing
         timestamp = song_info.timestamp
 
-        print(
-            f"received with is_playing = {is_playing} and idx = {playing_song_idx}"
-        )
+        print(f"received with is_playing = {is_playing} and idx = {playing_song_idx}")
 
         audio_bytes = BytesIO(self.audio_file_per_peer[conn])
         song = AudioSegment.from_mp3(audio_bytes)
