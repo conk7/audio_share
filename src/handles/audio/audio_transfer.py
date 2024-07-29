@@ -72,7 +72,7 @@ class AudioTransfer(AudioUtils):
                 print("", chunk.decode()[2:50])
                 if bytes_sent != chunks_info.data[i]:
                     print(
-                        f"sent {bytes_sent} expected to send {chunks_info_json[i]}. conn {peer}"
+                        f"sent {bytes_sent} expected to send {chunks_info_json[i]}. peer {peer}"
                     )
                     break
                 sleep(0.01)
@@ -105,14 +105,14 @@ class AudioTransfer(AudioUtils):
 
             sleep(0.1)
 
-    def get_all_audio(self, conn: socket.socket, chunk_info: List[Data]) -> None:
-        self.get_chunks(conn, chunk_info)
-        self.get_audio_info(conn)
+    def get_all_audio(self, peer: socket.socket, chunk_info: List[Data]) -> None:
+        self.get_chunks(peer, chunk_info)
+        self.get_audio_info(peer)
 
-    def get_chunks(self, conn: socket.socket, chunk_info: List[Data]) -> None:
+    def get_chunks(self, peer: socket.socket, chunk_info: List[Data]) -> None:
         print(f"received chunk_info {chunk_info}")
         for i, chunk_len in enumerate(chunk_info, 1):
-            data = conn.recv(chunk_len).decode()
+            data = peer.recv(chunk_len).decode()
             print(f"received chunk #{i}")
             print(f"slice of audio chunk in get_audio: {data[:50]}")
 
@@ -131,23 +131,23 @@ class AudioTransfer(AudioUtils):
             chunk = ast.literal_eval(data_mp3.data)
 
             if i == 1:
-                self.audio_file_per_peer[conn] = chunk
+                self.audio_file_per_peer[peer] = chunk
             elif i <= data_mp3.total_chunks:
-                self.audio_file_per_peer[conn] += chunk
+                self.audio_file_per_peer[peer] += chunk
 
-    def get_audio_info(self, conn: socket.socket) -> None:
-        data = conn.recv(CHUNK_SIZE_RECV).decode()
+    def get_audio_info(self, peer: socket.socket) -> None:
+        data = peer.recv(CHUNK_SIZE_RECV).decode()
 
         try:
             data = Data.model_validate_json(data)
         except _pydantic_core.ValidationError:
             print(f"App received invalid audio data {data[:70]}")
-            self.audio_file_per_peer.pop(conn)
+            self.audio_file_per_peer.pop(peer)
             return
 
         if data.type != DataType.SONG_INFO:
             print(f"App received audio data of wrong type {data[:50]}")
-            self.audio_file_per_peer.pop(conn)
+            self.audio_file_per_peer.pop(peer)
             return
 
         song_info: SongInfo = SongInfo.model_validate(data.data)
@@ -157,7 +157,7 @@ class AudioTransfer(AudioUtils):
 
         print(f"received with is_playing = {is_playing} and idx = {playing_song_idx}")
 
-        audio_bytes = BytesIO(self.audio_file_per_peer[conn])
+        audio_bytes = BytesIO(self.audio_file_per_peer[peer])
         song = AudioSegment.from_mp3(audio_bytes)
         self.add_to_queue(song)
 
@@ -174,6 +174,6 @@ class AudioTransfer(AudioUtils):
                 self.playing_song.pause()
                 self.state = PlayerStates.PAUSED
 
-        self.audio_file_per_peer.pop(conn)
+        self.audio_file_per_peer.pop(peer)
 
-        print(f"FINISHED RECEIVING AUDIO from {conn.getpeername()}")
+        print(f"FINISHED RECEIVING AUDIO from {peer.getpeername()}")

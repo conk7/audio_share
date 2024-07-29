@@ -6,10 +6,10 @@ from utils import DataType, Data
 
 class PeerUtils:
     def notify_about_new_peer(self, addr: str) -> None:
-        for conn in self.peers[:-1]:
+        for peer in self.peers[:-1]:
             data = Data(type=DataType.CONNECT, data=addr)
             data = data.model_dump_json()
-            conn.send(data.encode())
+            peer.send(data.encode())
 
     def connect_peer(self, addr: str) -> None:
         ip, port = addr.split(":")
@@ -27,12 +27,12 @@ class PeerUtils:
         data = data.model_dump_json()
         data = data.encode()
 
-        for conn in self.peers:
-            print(f"sent {data[:50]} to {conn}")
-            conn.sendall(data)
+        for peer in self.peers:
+            print(f"sent {data[:50]} to {peer}")
+            peer.sendall(data)
 
-        for conn in self.peers:
-            conn.close()
+        for peer in self.peers:
+            peer.close()
         self.peers.clear()
 
         self.sock.close()

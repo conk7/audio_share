@@ -23,17 +23,17 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
         if len(self.peers) == 0:
             return
         r, _, _ = select.select(self.peers, [], [], 0.1)
-        for conn in r:
-            data = conn.recv(CHUNK_SIZE_RECV).decode()
+        for peer in r:
+            data = peer.recv(CHUNK_SIZE_RECV).decode()
 
-            print(f"App received {data[:50]} from {conn}")
+            print(f"App received {data[:50]} from {peer}")
 
             try:
                 data = Data.model_validate_json(data)
             except ValidationError:
                 print("App received invalid data")
                 continue
-            self.handle_commands(conn, data)
+            self.handle_commands(peer, data)
 
     def handle_send(self, data: str = "") -> None:
         if data == "dc":

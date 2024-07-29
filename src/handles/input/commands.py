@@ -7,7 +7,7 @@ from ..audio.audio_transfer import AudioTransfer
 
 
 class HandleCommands(AudioTransfer, PeerUtils):
-    def handle_commands(self, conn: socket.socket, data: Data) -> None:
+    def handle_commands(self, peer: socket.socket, data: Data) -> None:
         data_type = data.type
         if data_type == DataType.GET_DATA:
             addr = data.data
@@ -19,10 +19,10 @@ class HandleCommands(AudioTransfer, PeerUtils):
             reply = Data(type=DataType.ADDRS, data=self.addrs[:-1])
             reply_json = reply.model_dump_json()
             reply_json = reply_json.encode()
-            conn.sendall(reply_json)
+            peer.sendall(reply_json)
 
             if len(self.audio_files) > 0:
-                self.get_audio(conn)
+                self.get_audio(peer)
 
         elif data_type == DataType.CONNECT:
             addr = data.data
@@ -33,7 +33,7 @@ class HandleCommands(AudioTransfer, PeerUtils):
             self.addrs.pop(idx)
             self.peers.pop(idx)
         elif data_type == DataType.CHUNKS_INFO:
-            self.get_all_audio(conn, data.data)
+            self.get_all_audio(peer, data.data)
         elif data_type == DataType.PLAY:
             self.stop_playback()
             self.playing_song_idx = data.data

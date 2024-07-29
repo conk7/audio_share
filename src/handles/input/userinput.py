@@ -11,6 +11,6 @@ class UserInput:
         data = data.model_dump_json()
         data = data.encode()
 
-        for conn in self.peers:
-            print(f"sent {data[:50]} to {conn}")
-            conn.sendall(data)
+        for peer in self.peers:
+            print(f"sent {data[:50]} to {peer}")
+            peer.sendall(data)

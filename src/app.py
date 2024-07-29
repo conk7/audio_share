@@ -53,14 +53,14 @@ class App(PeerHandler):
         while True:
             self.sock.listen(ROOM_SIZE)
             try:
-                conn, addr = self.sock.accept()
+                peer, addr = self.sock.accept()
             except:
                 break
 
             addr = f"{addr[0]}:{str(addr[1])}"
             print(f"accepted connection from {addr}")
 
-            self.peers.append(conn)
+            self.peers.append(peer)
 
     def connect(self, ip: str, port: int) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -103,13 +103,13 @@ class App(PeerHandler):
         while True:
             self.sock.listen(ROOM_SIZE)
             try:
-                conn, addr = self.sock.accept()
+                peer, addr = self.sock.accept()
             except:
                 break
 
             print(f"accepted connection from {addr[0]}:{str(addr[1])}")
 
-            self.peers.append(conn)
+            self.peers.append(peer)
             self.addrs.append(addr)
 
 
