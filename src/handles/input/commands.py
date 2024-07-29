@@ -22,7 +22,7 @@ class HandleCommands(AudioTransfer, PeerUtils):
             conn.sendall(reply_json)
 
             if len(self.audio_files) > 0:
-                self.sync_audio(conn)
+                self.get_audio(conn)
 
         elif data_type == DataType.CONNECT:
             addr = data.data
@@ -33,7 +33,7 @@ class HandleCommands(AudioTransfer, PeerUtils):
             self.addrs.pop(idx)
             self.peers.pop(idx)
         elif data_type == DataType.CHUNKS_INFO:
-            self.get_audio(conn, data.data)
+            self.get_all_audio(conn, data.data)
         elif data_type == DataType.PLAY:
             self.stop_playback()
             self.playing_song_idx = data.data

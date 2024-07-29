@@ -90,7 +90,7 @@ class AudioTransfer(AudioUtils):
                 peer.sendall(data)
                 print(f"successfully sent audio to {peer}")
 
-    def sync_audio(self, peer: socket.socket) -> None:
+    def get_audio(self, peer: socket.socket) -> None:
         for n, song in enumerate(self.audio_files):
             if n == self.playing_song_idx and self.state == PlayerStates.PLAYING:
                 is_playing = True
@@ -105,7 +105,7 @@ class AudioTransfer(AudioUtils):
 
             sleep(0.1)
 
-    def get_audio(self, conn: socket.socket, chunk_info: List[Data]) -> None:
+    def get_all_audio(self, conn: socket.socket, chunk_info: List[Data]) -> None:
         self.get_chunks(conn, chunk_info)
         self.get_audio_info(conn)
 
