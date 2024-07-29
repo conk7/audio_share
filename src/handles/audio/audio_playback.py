@@ -8,7 +8,7 @@ from .audio_utils import AudioUtils
 
 
 class AudioPlayback(AudioUtils):
-    def add_audio(self, song_name):
+    def add_audio(self, song_name) -> AudioSegment | None:
         SCRIPT_DIR = Path(__file__).parent.parent.parent.parent
         song_path = str(Path(SCRIPT_DIR, song_name))
 
@@ -16,7 +16,7 @@ class AudioPlayback(AudioUtils):
             song = AudioSegment.from_mp3(song_path)
         except FileNotFoundError:
             print(f"Could not find song with path {song_path}")
-            return
+            return None
 
         song -= 30
 

@@ -24,7 +24,10 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
             return
         r, _, _ = select.select(self.peers, [], [], 0.1)
         for peer in r:
-            data = peer.recv(CHUNK_SIZE_RECV).decode()
+            try:
+                data = peer.recv(CHUNK_SIZE_RECV).decode()
+            except:
+                continue
 
             print(f"App received {data[:50]} from {peer}")
 
@@ -41,8 +44,10 @@ class PeerHandler(HandleCommands, AudioPlayback, UserInput):
 
         elif data[:3] == "add":
             song_name = data[4:]
-            if song_name != "":
+            if song_name != "" and song_name.endswith(".mp3"):
                 song = self.add_audio(song_name)
+                if song is None:
+                    return
                 self.send_audio(song, len(self.audio_files) - 1, False)
 
         elif data[:4] == "play":
