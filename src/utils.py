@@ -4,7 +4,7 @@ import os
 from argparse import ArgumentParser
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, Callable
 from enum import Enum
 from pydub import AudioSegment
 
@@ -49,6 +49,16 @@ def get_chunks_num(song_len) -> int:
         return (song_len / CHUNK_SIZE_SEND) - 1
     else:
         return (song_len // CHUNK_SIZE_SEND) - 1
+    
+
+def singleton(class_: type) -> Callable:
+    instances = {}
+
+    def getinstance(*args: tuple[Any], **kwargs: dict[str, Any]) -> object:
+        if class_ not in instances:
+            instances[class_] = class_(*args, **kwargs)
+        return instances[class_]
+    return getinstance
 
 
 class PlayerStates(Enum):
@@ -58,7 +68,7 @@ class PlayerStates(Enum):
 
 
 class DataType(Enum):
-    GET_DATA = 0
+    GET_ADDRS = 0
     CONNECT = 1
     DISCONNECT = 2
     ADDRS = 3
