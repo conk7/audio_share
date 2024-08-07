@@ -78,7 +78,7 @@ class DataType(Enum):
     CHUNKS_INFO = 7
     PAUSE = 8
     RESUME = 9
-    SONG_INFO = 11
+    PLAYER_INFO = 11
     SONG_CHANGE = 10
     PLAY_NEXT = 12
     PLAY = 13
@@ -96,7 +96,7 @@ class DataMP3(BaseModel):
     data: Any
 
 
-class SongInfo(BaseModel):
+class PlayerInfo(BaseModel):
+    player_state: PlayerStates
     song_idx: int
-    is_playing: bool
     timestamp: int

@@ -31,11 +31,12 @@ class UserInputManager:
             if audio_name == "" or not audio_name.endswith(".mp3"):
                 return
 
-            audio, audio_idx, is_playing, timestamp = self.Player.add_audio(audio_name)
+            audio = self.Player.add_audio(audio_name)
             if audio is None:
                 return
             
-            self.ConnManager.send_audio(audio, audio_idx, is_playing, timestamp)
+            self.ConnManager.send_audio(audio)
+            
 
         elif user_input[:4] == "play":
             song_idx = user_input[5:]

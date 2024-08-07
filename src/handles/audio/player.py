@@ -40,32 +40,41 @@ class Player:
 
         self.__add_to_queue(audio)
 
-        return audio, len(self.audio_files) - 1, False, 0
+        return audio
+    
 
     def add_audio_files(
         self,
-        audio_files: List[AudioSegment],
+        audio_files: List[AudioSegment]
+    ) -> None:
+        for audio in audio_files:
+            # audio -= 30  # might be used to change volume in client
+            self.__add_to_queue(audio)
+
+    def set_state(
+        self,
+        player_state: PlayerStates,
         playing_song_idx: int,
-        is_playing: bool,
         timestamp: int,
     ) -> None:
         self.playing_song_idx = playing_song_idx
-        self.is_playing = is_playing
         self.timestamp = timestamp
+        self.state = player_state
 
-        for audio in audio_files:
-            # audio -= 30
-            self.__add_to_queue(audio)
-
-        if self.playing_song is None and self.playing_song_idx != -1:
+        if player_state == PlayerStates.PLAYING and len(self.audio_files) >= playing_song_idx:
+            self.stop()
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx][timestamp:]
             )
-            if is_playing:
-                self.state = PlayerStates.PLAYING
-            else:
-                self.playing_song.pause()
-                self.state = PlayerStates.PAUSED
+        # if self.playing_song is None and self.playing_song_idx != -1:
+        #     self.playing_song = playback._play_with_simpleaudio(
+        #         self.audio_files[self.playing_song_idx][timestamp:]
+        #     )
+        #     if is_playing:
+        #         self.state = PlayerStates.PLAYING
+        #     else:
+        #         self.playing_song.pause()
+        #         self.state = PlayerStates.PAUSED
 
     def play(self, idx: int) -> None:
         if idx is None or not 0 <= idx < len(self.audio_files):
@@ -84,9 +93,9 @@ class Player:
             self.state = PlayerStates.PAUSED
 
     def resume(self) -> None:
-        # print(
-        #     f"resuming audio with playingsong is None = {self.playing_song is None} and PlayerState = {self.state}"
-        # )
+        print(
+            f"resuming audio with playingsong is None = {self.playing_song is None} and PlayerState = {self.state}"
+        )
         if self.playing_song is not None and self.state == PlayerStates.PAUSED:
             self.playing_song.resume()
             self.state = PlayerStates.PLAYING
@@ -166,7 +175,7 @@ class Player:
             if 0 <= self.playing_song_idx < len(
                 self.audio_files
             ) and self.timestamp >= len(self.audio_files[self.playing_song_idx]):
-                self.play_next_audio()
+                self.play_next()
                 prev_playing_song_idx = -1
                 self.timestamp = 0
 

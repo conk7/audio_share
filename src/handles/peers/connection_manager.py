@@ -9,7 +9,7 @@ from utils import (
     Data,
     DataType,
     DataMP3,
-    SongInfo,
+    PlayerInfo,
     PlayerStates,
     CHUNK_SIZE_SEND,
     CHUNK_SIZE_RECV,
@@ -67,7 +67,6 @@ class ConnectionManager:
 
             self.active_connections[sock] = time.time()
             ip, port = addr
-            # self.addrs.append((ip, port))
 
             print(f"host connected {ip, port}")
 
@@ -173,7 +172,11 @@ class ConnectionManager:
 
         elif data_type == DataType.CHUNKS_INFO:
             chunk_info = data.data
-            self.get_audio(peer, chunk_info)
+            self.get_chunks(peer, chunk_info)
+
+        elif data_type == DataType.PLAYER_INFO:
+            player_info = data.data
+            self.set_player_info(player_info)
 
         elif data_type == DataType.PLAY:
             song_idx = data.data
@@ -269,9 +272,6 @@ class ConnectionManager:
     def send_audio(
         self,
         song: str,
-        song_idx: int,
-        is_playing: bool,
-        timestamp: int = 0,
         addr: socket.socket | None = None,
     ) -> None:
         export_bytes = BytesIO()
@@ -323,45 +323,48 @@ class ConnectionManager:
                     )
                     break
                 time.sleep(0.01)
-            else:
-                data = Data(
-                    type=DataType.SONG_INFO,
-                    data=SongInfo(
-                        song_idx=song_idx,
-                        is_playing=is_playing,
-                        timestamp=timestamp,
-                    ),
-                )
-                data = data.model_dump_json()
-                data = data.encode()
-                peer.sendall(data)
-                print(f"successfully sent audio to {peer}")
 
     def send_all_audio(self, peer: socket.socket) -> None:
         audio_files = self.Player.get_audio_files()
-        player_state = self.Player.get_state()
-        playing_song_idx = self.Player.get_playing_song_idx()
 
         for n, song in enumerate(audio_files):
             print(f"sending {n}th audio")
-            if n == playing_song_idx and player_state == PlayerStates.PLAYING:
-                is_playing = True
-                timestamp = (
-                    self.Player.get_timestamp() + 1500
-                )  # add some ms to compensate latency
-            else:
-                is_playing = False
-                timestamp = 0
-
-            self.send_audio(song, n, is_playing, timestamp, peer)
+    
+            self.send_audio(song, peer)
 
             time.sleep(0.1)
+        
+        player_state = self.Player.get_state()
+        playing_song_idx = self.Player.get_playing_song_idx()
+        timestamp = self.Player.get_timestamp()
+        
+        self.send_player_info(player_state, playing_song_idx, timestamp, peer)
 
-    def get_audio(self, peer: socket.socket, chunk_info: List[Data]) -> None:
-        chunks = self.get_chunks(peer, chunk_info)
-        if chunks is None:
-            return
-        self.get_audio_info(peer, chunks)
+    def send_player_info(
+        self,
+        player_state: PlayerStates,
+        song_idx: int,
+        timestamp: int = 0,
+        addr: socket.socket | None = None,
+    ) -> None:
+        if addr is None:
+            peers = self.active_connections
+        else:
+            peers = [addr]
+
+        for peer in peers:
+            data = Data(
+                type=DataType.PLAYER_INFO,
+                data=PlayerInfo(
+                    player_state=player_state,
+                    song_idx=song_idx,
+                    timestamp=timestamp,
+                ),
+            )
+            data = data.model_dump_json()
+            data = data.encode()
+            peer.sendall(data)
+            print(f"successfully sent player info to {peer}")
 
     def get_chunks(self, peer: socket.socket, chunk_info: List[Data]) -> bytes | None:
         print(f"received chunk_info {chunk_info}")
@@ -389,36 +392,24 @@ class ConnectionManager:
             elif i <= data_mp3.total_chunks:
                 chunks += chunk
         else:
-            return chunks
+            audio_bytes = BytesIO(chunks)
+            audio = AudioSegment.from_mp3(audio_bytes)
+            self.Player.add_audio_files([audio])
 
-        return None
-
-    def get_audio_info(self, peer: socket.socket, chunks: bytes) -> None:
-        data = peer.recv(CHUNK_SIZE_RECV).decode()
-
+    def set_player_info(self, data: dict) -> None:
         try:
-            data = Data.model_validate_json(data)
+            song_info: PlayerInfo = PlayerInfo.model_validate(data)
         except ValidationError:
-            print(f"App received invalid audio data {data[:70]}")
+            print(f"App received invalid player info {data[:70]}")
             return
 
-        if data.type != DataType.SONG_INFO:
-            print(f"App received audio data of wrong type {data[:50]}")
-            return
-
-        audio_bytes = BytesIO(chunks)
-        song = AudioSegment.from_mp3(audio_bytes)
-
-        song_info: SongInfo = SongInfo.model_validate(data.data)
+        player_state = song_info.player_state
         playing_song_idx = song_info.song_idx
-        is_playing = song_info.is_playing
         timestamp = song_info.timestamp
 
-        print(f"received with is_playing = {is_playing} and idx = {playing_song_idx}")
+        print(f"received with idx = {playing_song_idx}")
 
-        self.Player.add_audio_files([song], playing_song_idx, is_playing, timestamp)
-
-        print(f"FINISHED RECEIVING AUDIO from {peer.getpeername()}")
+        self.Player.set_state(player_state, playing_song_idx, timestamp)
 
     def send_user_input(self, data: str) -> None:
         data = Data(type=DataType.USER_INPUT, data=data)
@@ -432,10 +423,3 @@ class ConnectionManager:
             except ConnectionAbortedError:
                 print("connection aborted")
                 break
-
-    # async def send_personal_message(self, message: str, sock: socket):
-    #     await sock.send_text(message)
-
-    # async def broadcast(self, message: str):
-    #     for connection in self.active_connections.keys():
-    #         await connection.send_text(message)
