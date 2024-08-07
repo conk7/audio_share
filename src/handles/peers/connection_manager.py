@@ -11,7 +11,7 @@ from utils import (
     DataMP3,
     PlayerInfo,
     PlayerStates,
-    CHUNK_SIZE_SEND,
+    AUDIO_CHUNK_SIZE,
     CHUNK_SIZE_RECV,
     ROOM_SIZE,
     get_chunks_num,
@@ -287,7 +287,7 @@ class ConnectionManager:
             data_mp3 = DataMP3(
                 chunk_num=i + 1,
                 total_chunks=total_chunks,
-                data=str(export_bytes[i * CHUNK_SIZE_SEND : (i + 1) * CHUNK_SIZE_SEND]),
+                data=str(export_bytes[i * AUDIO_CHUNK_SIZE : (i + 1) * AUDIO_CHUNK_SIZE]),
             )
             chunk = Data(type=DataType.CHUNK_MP3, data=data_mp3)
             chunk_json = chunk.model_dump_json().encode()
@@ -329,15 +329,15 @@ class ConnectionManager:
 
         for n, song in enumerate(audio_files):
             print(f"sending {n}th audio")
-    
+
             self.send_audio(song, peer)
 
             time.sleep(0.1)
-        
+
         player_state = self.Player.get_state()
         playing_song_idx = self.Player.get_playing_song_idx()
         timestamp = self.Player.get_timestamp()
-        
+
         self.send_player_info(player_state, playing_song_idx, timestamp, peer)
 
     def send_player_info(

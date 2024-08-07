@@ -8,8 +8,10 @@ from typing import Any, Callable
 from enum import Enum
 from pydub import AudioSegment
 
-CHUNK_SIZE_SEND = 500 * 1024
-CHUNK_SIZE_RECV = 500 * 1024
+
+AUDIO_CHUNK_SIZE = 500 * 1024
+CHUNK_SIZE_SEND = 10 * 1024
+CHUNK_SIZE_RECV = 10 * 1024
 AUDIO_QUEUE_SIZE = 20
 ROOM_SIZE = 5
 
@@ -43,13 +45,13 @@ def add_CL_args(parser: ArgumentParser) -> ArgumentParser:
 
 
 def get_chunks_num(song_len) -> int:
-    if song_len <= CHUNK_SIZE_SEND:
+    if song_len <= AUDIO_CHUNK_SIZE:
         return 1
-    elif song_len % CHUNK_SIZE_SEND == 0:
-        return (song_len / CHUNK_SIZE_SEND) - 1
+    elif song_len % AUDIO_CHUNK_SIZE == 0:
+        return (song_len / AUDIO_CHUNK_SIZE) - 1
     else:
-        return (song_len // CHUNK_SIZE_SEND) - 1
-    
+        return (song_len // AUDIO_CHUNK_SIZE) - 1
+
 
 def singleton(class_: type) -> Callable:
     instances = {}
@@ -58,6 +60,7 @@ def singleton(class_: type) -> Callable:
         if class_ not in instances:
             instances[class_] = class_(*args, **kwargs)
         return instances[class_]
+
     return getinstance
 
 

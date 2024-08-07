@@ -34,9 +34,8 @@ class UserInputManager:
             audio = self.Player.add_audio(audio_name)
             if audio is None:
                 return
-            
+
             self.ConnManager.send_audio(audio)
-            
 
         elif user_input[:4] == "play":
             song_idx = user_input[5:]

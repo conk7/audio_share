@@ -41,12 +41,8 @@ class Player:
         self.__add_to_queue(audio)
 
         return audio
-    
 
-    def add_audio_files(
-        self,
-        audio_files: List[AudioSegment]
-    ) -> None:
+    def add_audio_files(self, audio_files: List[AudioSegment]) -> None:
         for audio in audio_files:
             # audio -= 30  # might be used to change volume in client
             self.__add_to_queue(audio)
@@ -61,7 +57,10 @@ class Player:
         self.timestamp = timestamp
         self.state = player_state
 
-        if player_state == PlayerStates.PLAYING and len(self.audio_files) >= playing_song_idx:
+        if (
+            player_state == PlayerStates.PLAYING
+            and len(self.audio_files) >= playing_song_idx
+        ):
             self.stop()
             self.playing_song = playback._play_with_simpleaudio(
                 self.audio_files[self.playing_song_idx][timestamp:]
