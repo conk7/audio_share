@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import List
 from simpleaudio import PlayObject
 from pydub import AudioSegment, playback
-from utils import PlayerStates, singleton, init_ffmpeg, AUDIO_QUEUE_SIZE
+from models import PlayerStates
+from utils import singleton, init_ffmpeg
+from constants import AUDIO_QUEUE_SIZE
 
 
 @singleton

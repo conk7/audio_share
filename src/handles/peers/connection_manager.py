@@ -5,18 +5,13 @@ import threading
 import socket
 import select
 
+from models import Data, DataType, DataMP3, PlayerInfo, PlayerStates
 from utils import (
-    Data,
-    DataType,
-    DataMP3,
-    PlayerInfo,
-    PlayerStates,
     AUDIO_CHUNK_SIZE,
-    CHUNK_SIZE_RECV,
-    ROOM_SIZE,
     get_chunks_num,
     singleton,
 )
+from constants import CHUNK_SIZE_RECV, ROOM_SIZE
 from typing import List
 from pydantic_core._pydantic_core import ValidationError
 from pydub import AudioSegment
@@ -287,7 +282,9 @@ class ConnectionManager:
             data_mp3 = DataMP3(
                 chunk_num=i + 1,
                 total_chunks=total_chunks,
-                data=str(export_bytes[i * AUDIO_CHUNK_SIZE : (i + 1) * AUDIO_CHUNK_SIZE]),
+                data=str(
+                    export_bytes[i * AUDIO_CHUNK_SIZE : (i + 1) * AUDIO_CHUNK_SIZE]
+                ),
             )
             chunk = Data(type=DataType.CHUNK_MP3, data=data_mp3)
             chunk_json = chunk.model_dump_json().encode()
